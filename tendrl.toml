@@ -1,0 +1,22 @@
+# Tendrl Test Configuration
+# Testing the daemon → query pipeline
+
+[feed.zaps]
+name = "Zaps"
+description = "Lightning zap receipts"
+display_kinds = [9735]
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.zaps.pattern]
+filter_type = "hybrid"
+
+[[feed.zaps.pattern.local_queries]]
+kinds = [9735]
+limit = 100
+note = "Backfill recent zaps from local database"
+
+[[feed.zaps.pattern.remote_filters]]
+kinds = [9735]
+limit = 50
+note = "Stream new zaps from relays"
