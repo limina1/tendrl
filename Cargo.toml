@@ -5,6 +5,7 @@ members = [
     "crates/tendrl_core",
     "crates/tendrl_daemon",
     "crates/tendrl_query",
+    "crates/enostr",
 ]
 
 [workspace.package]
