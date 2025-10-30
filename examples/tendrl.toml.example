@@ -1,0 +1,473 @@
+# Tendrl Configuration Example
+# Copy this file to tendrl.toml and customize for your needs
+
+# ==============================================================================
+# USER CONFIGURATION
+# ==============================================================================
+# Your Nostr identity and default relay preferences
+
+[user]
+# Optional: Your npub (for future features like personalized feeds)
+npub = "npub1abc123..."
+
+# Optional: Your display name
+name = "Your Name"
+
+# Default relays used by all feeds (unless feed specifies custom relays)
+relays = [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band",
+    "wss://theforest.nostr1.com"
+]
+
+# Cache behavior
+[user.cache]
+profile_ttl = 0            # Never expire profiles (0 = infinite)
+event_refresh = 300        # Refetch event stats every 5 minutes
+
+# ==============================================================================
+# FEED 1: ZAPS
+# ==============================================================================
+# Lightning payment activity across the network
+# Kind 9735 = zap receipts (proof of payment)
+
+[feed.zaps]
+name = "Zaps"
+description = "Lightning flowing through the network - value transfer made visible"
+
+# Use default user.relays
+relay_mode = "general"
+
+# Stream new zaps continuously
+fetch_strategy = "stream"
+
+# Show all zaps (not just from people you follow)
+filter_by_follows = false
+
+# Always refetch zap stats
+refetch_engagement = true
+
+# Display kind 9735 as root items
+display_kinds = [9735]
+
+# Fetching pattern (hybrid = local queries + remote filters)
+[feed.zaps.pattern]
+filter_type = "hybrid"
+
+# Query nostrdb for cached events
+local_queries = [
+    { kinds = [9735], limit = 500, note = "Zap receipts" },
+    { kinds = [0], limit = 500, note = "User profiles" },
+]
+
+# Fetch from relays
+remote_filters = [
+    { kinds = [9735, 0], limit = 250 }
+]
+
+# Root event configuration
+[feed.zaps.root]
+kind = 9735
+template = "zap-card"
+
+# Dependency: Sender profile (extracted from zap request description)
+[feed.zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+# Dependency: Recipient profile (from p-tag)
+[feed.zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+# Dependency: Event being zapped (optional, from e-tag)
+[feed.zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+# ==============================================================================
+# FEED 2: HIGHLIGHTS
+# ==============================================================================
+# Annotated text excerpts from articles, notes, and other content
+# Kind 9802 = highlight events (NIP-84)
+
+[feed.highlights]
+name = "Highlights"
+description = "Annotated excerpts - text that migrates between contexts"
+
+relay_mode = "general"
+fetch_strategy = "stream"
+filter_by_follows = false
+
+display_kinds = [9802]
+
+[feed.highlights.pattern]
+filter_type = "hybrid"
+
+local_queries = [
+    { kinds = [9802], limit = 500, note = "Highlight events" },
+    { kinds = [0], limit = 500, note = "User profiles" },
+]
+
+remote_filters = [
+    { kinds = [9802, 0], limit = 250 }
+]
+
+[feed.highlights.root]
+kind = 9802
+template = "highlight-card"
+
+# Author of the highlight
+[feed.highlights.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# The event being highlighted (article, note, etc.)
+[feed.highlights.root.deps.highlighted_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+# Author of the highlighted content
+[feed.highlights.root.deps.highlighted_author]
+kind = 0
+relation = "highlighted_author"
+required = false
+
+# Engagement stats on the highlight itself
+[feed.highlights.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.highlights.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+[feed.highlights.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+# ==============================================================================
+# FEED 3: LONG-FORM ARTICLES
+# ==============================================================================
+# Long-form content (blog posts, essays, tutorials)
+# Kind 30023 = long-form article (NIP-23)
+
+[feed.articles]
+name = "Articles"
+description = "Long-form content from across the network"
+
+# Use custom relays optimized for long-form content
+relay_mode = "custom"
+relays = [
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com",
+    "wss://relay.nostr.band"
+]
+
+# Manual fetch (long-form is more static, not real-time)
+fetch_strategy = "manual"
+filter_by_follows = false
+refetch_engagement = true
+
+display_kinds = [30023]
+
+[feed.articles.pattern]
+filter_type = "hybrid"
+
+local_queries = [
+    { kinds = [30023], limit = 500, note = "Long-form articles" },
+    { kinds = [0], limit = 500, note = "Author profiles" },
+]
+
+remote_filters = [
+    { kinds = [30023, 0], limit = 250 }
+]
+
+[feed.articles.root]
+kind = 30023
+template = "article-card"
+
+# Author profile
+[feed.articles.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# Engagement stats (use a_tag for addressable events!)
+[feed.articles.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.articles.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+[feed.articles.root.deps.replies]
+kind = 1
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+
+# ==============================================================================
+# FEED 4: NOTES (OPTIONAL - BASIC TIMELINE)
+# ==============================================================================
+# Short-form text notes (Twitter-like posts)
+# Kind 1 = text note
+
+[feed.notes]
+name = "Notes"
+description = "Short-form text notes from the network"
+
+relay_mode = "general"
+fetch_strategy = "stream"
+
+# Set to true to only see notes from people you follow
+filter_by_follows = false
+
+display_kinds = [1]
+
+[feed.notes.pattern]
+filter_type = "hybrid"
+
+local_queries = [
+    { kinds = [1], limit = 1000, note = "Text notes" },
+    { kinds = [0], limit = 500, note = "Profiles" },
+]
+
+# Fetch recent notes (last 24 hours)
+remote_filters = [
+    {
+        kinds = [1, 0],
+        limit = 500,
+        # since = 1234567890  # Uncomment and set to (current_time - 86400)
+    }
+]
+
+[feed.notes.root]
+kind = 1
+template = "note-card"
+
+# Author profile
+[feed.notes.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# Quoted events (from e-tags)
+[feed.notes.root.deps.quoted_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+# Mentioned profiles (from p-tags)
+[feed.notes.root.deps.mentioned_profiles]
+kind = 0
+relation = "p_tag"
+multiple = true
+required = false
+
+# Engagement stats
+[feed.notes.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.notes.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+[feed.notes.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+[feed.notes.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+# ==============================================================================
+# OPTIONAL FEEDS (uncomment to enable)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# PUBLICATIONS (Hierarchical long-form content)
+# ------------------------------------------------------------------------------
+# Uncomment to enable publications feed (nested articles/wikis/sections)
+
+# [feed.publications]
+# name = "Publications"
+# description = "Hierarchical long-form content with nested sections"
+# display_kinds = [30040]
+#
+# relay_mode = "custom"
+# relays = [
+#     "wss://theforest.nostr1.com",
+#     "wss://thecitadel.nostr1.com",
+#     "wss://medschlr.nostr1.com"
+# ]
+#
+# fetch_strategy = "manual"
+# filter_by_follows = false
+# refetch_engagement = true
+#
+# [feed.publications.pattern]
+# filter_type = "hybrid"
+#
+# local_queries = [
+#     { kinds = [30040], limit = 500, note = "Publication containers" },
+#     { kinds = [30041], limit = 500, note = "Sections" },
+#     { kinds = [30818], limit = 500, note = "Wiki pages" },
+#     { kinds = [30023], limit = 500, note = "Articles" },
+#     { kinds = [0], limit = 500, note = "Profiles" },
+# ]
+#
+# remote_filters = [
+#     { kinds = [30040, 30041, 30818, 30023, 0], limit = 250 }
+# ]
+#
+# [feed.publications.root]
+# kind = 30040
+# template = "publication-card"
+#
+# [feed.publications.root.deps.author]
+# kind = 0
+# relation = "author"
+# required = true
+#
+# # Nested sub-publications (tree structure)
+# [feed.publications.root.deps.sub_publications]
+# kind = 30040
+# relation = "a_tag"
+# mode = "tree"
+# max_depth = 5
+# required = false
+#
+# # Content: Sections
+# [feed.publications.root.deps.sections]
+# kind = 30041
+# relation = "a_tag_children"
+# mode = "expanded"
+# required = false
+#
+# # Engagement
+# [feed.publications.root.deps.zaps]
+# kind = 9735
+# relation = "a_tag"
+# mode = "aggregate"
+# stats = ["count", "total_sats"]
+
+# ------------------------------------------------------------------------------
+# DVM JOBS (AI Task Marketplace)
+# ------------------------------------------------------------------------------
+# Uncomment to enable DVM jobs feed (Data Vending Machine tasks)
+
+# [feed.dvm_jobs]
+# name = "DVM Jobs"
+# description = "AI task marketplace - humans requesting, machines responding"
+# display_kinds = [5000, 5001, 5002]
+#
+# relay_mode = "general"
+# fetch_strategy = "stream"
+# filter_by_follows = false
+#
+# [feed.dvm_jobs.pattern]
+# filter_type = "hybrid"
+#
+# local_queries = [
+#     { kinds = [5000, 5001, 5002, 6000, 6001, 6002], limit = 500 },
+#     { kinds = [0], limit = 500 },
+# ]
+#
+# remote_filters = [
+#     { kinds = [5000, 5001, 5002, 6000, 6001, 6002, 0], limit = 250 }
+# ]
+#
+# [feed.dvm_jobs.root]
+# kind = 5000
+# template = "dvm-job-card"
+#
+# [feed.dvm_jobs.root.deps.requester]
+# kind = 0
+# relation = "author"
+# required = true
+#
+# # Job results (kind 6000-6999)
+# [feed.dvm_jobs.root.deps.results]
+# kind = 6000
+# relation = "e_tag"
+# mode = "aggregate"
+# required = false
+#
+# # Payment for job
+# [feed.dvm_jobs.root.deps.zaps]
+# kind = 9735
+# relation = "e_tag"
+# mode = "aggregate"
+# stats = ["count", "total_sats"]
+
+# ==============================================================================
+# NOTES
+# ==============================================================================
+#
+# COMMON EVENT KINDS:
+#   0     - Profile metadata
+#   1     - Short note
+#   6     - Repost
+#   7     - Reaction
+#   9735  - Zap receipt
+#   9802  - Highlight
+#   30023 - Long-form article
+#   30040 - Publication container
+#   30041 - Section
+#   30818 - Wiki page
+#   5000+ - DVM job requests
+#   6000+ - DVM job results
+#
+# RELATION TYPES:
+#   "author"              - Event's author (pubkey)
+#   "e_tag"               - Referenced event (e-tag)
+#   "a_tag"               - Addressable event reference (a-tag)
+#   "p_tag"               - Mentioned profile (p-tag)
+#   "sender"              - Custom: zap sender
+#   "recipient"           - Custom: zap recipient
+#   "highlighted_author"  - Custom: author of highlighted content
+#
+# FETCH MODES:
+#   "single"    - Fetch one related event
+#   "tree"      - Build hierarchical tree
+#   "aggregate" - Compute statistics
+#   "expanded"  - Fetch and inline content
+#
+# RELAY MODES:
+#   "general" - Use user.relays
+#   "custom"  - Use feed-specific relays
+#   "inbox"   - Use user's inbox relays (NIP-65)
+#
+# FETCH STRATEGIES:
+#   "stream"  - Continuous polling for new events
+#   "manual"  - Fetch only on explicit request
+#   "polling" - Periodic refresh
+#
+# ==============================================================================

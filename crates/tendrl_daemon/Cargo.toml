@@ -1,0 +1,22 @@
+[package]
+name = "tendrl_daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Headless Nostr event fetcher daemon"
+
+[[bin]]
+name = "tendrl_daemon"
+path = "src/main.rs"
+
+[dependencies]
+tendrl_core = { workspace = true }
+nostrdb = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
