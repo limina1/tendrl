@@ -1,0 +1,31 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Cargo.lock for libraries (keep for binaries)
+# Cargo.lock
+
+# Environment variables
+.env
+.env.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Tendrl runtime data
+tendrl_data/
+*.db
+*.lmdb
+*.mdb
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
