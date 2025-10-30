@@ -1,0 +1,58 @@
+# Test configuration for per-event enrichment
+
+[feed.notes_enriched]
+name = "Notes with Engagement"
+description = "Notes enriched with reactions, zaps, and author profiles"
+display_kinds = [1]
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.notes_enriched.pattern]
+filter_type = "hybrid"
+
+# Fetch notes + all their dependencies
+[[feed.notes_enriched.pattern.local_queries]]
+kinds = [1]
+limit = 100
+note = "Backfill notes"
+
+[[feed.notes_enriched.pattern.local_queries]]
+kinds = [7, 9735, 6, 0]
+limit = 2000
+note = "Backfill engagement data"
+
+[[feed.notes_enriched.pattern.remote_filters]]
+kinds = [1, 7, 9735, 6, 0]
+limit = 250
+
+# Root configuration for enrichment
+[feed.notes_enriched.root]
+kind = 1
+template = "note-card"
+
+# Enrich each note with author profile
+[feed.notes_enriched.root.deps.author]
+kind = 0
+relation = "author"
+required = false
+
+# Aggregate reaction counts
+[feed.notes_enriched.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+# Aggregate zap stats
+[feed.notes_enriched.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+# Aggregate repost count
+[feed.notes_enriched.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]

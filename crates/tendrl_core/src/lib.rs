@@ -1,4 +1,5 @@
 pub mod config;
+pub mod enrichment;
 pub mod error;
 pub mod feed;
 pub mod filter;
@@ -7,6 +8,7 @@ pub mod note_cache;
 pub mod timeline;
 
 pub use config::*;
+pub use enrichment::*;
 pub use error::*;
 pub use feed::*;
 pub use filter::*;

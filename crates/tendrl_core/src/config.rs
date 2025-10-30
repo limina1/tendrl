@@ -153,6 +153,9 @@ pub struct DepConfig {
 
     #[serde(default)]
     pub fetch_any_kind: bool,
+
+    #[serde(default)]
+    pub stats: Vec<String>,  // "count", "by_content", "total_sats"
 }
 
 fn default_limit() -> u64 {

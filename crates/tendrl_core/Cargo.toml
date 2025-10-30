@@ -17,4 +17,5 @@ notedeck = { workspace = true }
 notedeck_ui = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+hex = "0.4"
 profiling = { version = "1", default-features = false }

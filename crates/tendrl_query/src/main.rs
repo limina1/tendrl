@@ -1,56 +1,72 @@
-//! # nostrdb-json-query
+//! # tendrl-query
 //!
 //! A CLI tool for querying nostrdb and outputting JSONL (JSON Lines) format.
+//! Supports both independent stream mode and per-event enrichment mode.
 //!
 //! ## Usage Examples
 //!
+//! ### Independent Stream Mode (default)
+//!
 //! Query for zaps:
 //! ```bash
-//! nostrdb-json-query --db ~/.local/share/notedeck/db --kinds 9735 --limit 50
+//! tendrl_query --db ~/.local/share/tendrl/nostrdb --kinds 9735 --limit 50
 //! ```
 //!
 //! Query for notes from specific author:
 //! ```bash
-//! nostrdb-json-query --db ~/.local/share/notedeck/db --kinds 1 --author <pubkey_hex> --limit 100
-//! ```
-//!
-//! Query with time range:
-//! ```bash
-//! nostrdb-json-query --db ~/.local/share/notedeck/db --kinds 1 --since 1704067000 --until 1704070000
+//! tendrl_query --db ~/.local/share/tendrl/nostrdb --kinds 1 --author <pubkey_hex> --limit 100
 //! ```
 //!
 //! Query multiple kinds:
 //! ```bash
-//! nostrdb-json-query --db ~/.local/share/notedeck/db --kinds 1,7,9735 --limit 100
+//! tendrl_query --db ~/.local/share/tendrl/nostrdb --kinds 1,7,9735 --limit 100
 //! ```
+//!
+//! ### Per-Event Enrichment Mode
+//!
+//! Query with enrichment (requires tendrl.toml):
+//! ```bash
+//! tendrl_query --feed notes --config tendrl.toml --limit 100
+//! ```
+//!
+//! This reads the feed configuration from tendrl.toml and enriches each root event
+//! with its dependencies (reactions, zaps, author profiles, etc.)
 //!
 //! ## Output Format
 //!
-//! Each event is output as a single line of JSON matching the Nostr event specification:
+//! ### Independent Mode
+//! Each event is output as a single line of JSON:
 //! ```json
 //! {"id":"...", "pubkey":"...", "created_at":..., "kind":..., "content":"...", "tags":[...], "sig":"..."}
 //! ```
 //!
-//! ## Pipeline Usage
-//!
-//! This tool is designed to be used in pipelines. For example, to process with jq:
-//! ```bash
-//! nostrdb-json-query --db ~/.local/share/notedeck/db --kinds 1 --limit 1000 | jq -r '.content'
+//! ### Enrichment Mode
+//! Each root event includes an `_enriched` field with dependency data:
+//! ```json
+//! {
+//!   "id":"...", "kind":1, "content":"...",
+//!   "_enriched": {
+//!     "author": {"id":"...", "kind":0, "content":"..."},
+//!     "stats": {"reactions": {"count": 42}, "zaps": {"count": 5, "total_sats": 21000}}
+//!   }
+//! }
 //! ```
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use nostrdb::{Config, FilterBuilder, Ndb, Note, Transaction};
 use serde::Serialize;
+use std::path::PathBuf;
+use tendrl_core::{EnrichmentEngine, TendrlConfig};
 
 #[derive(Parser)]
-#[command(name = "nostrdb-json-query")]
-#[command(about = "Query nostrdb and output JSONL")]
+#[command(name = "tendrl-query")]
+#[command(about = "Query nostrdb and output JSONL with optional enrichment")]
 #[command(version)]
 struct Args {
     /// Path to nostrdb database directory
     #[arg(short, long)]
-    db: String,
+    db: Option<String>,
 
     /// Filter by event kind(s), comma-separated
     #[arg(short, long)]
@@ -71,6 +87,14 @@ struct Args {
     /// Filter events until timestamp (unix epoch)
     #[arg(long)]
     until: Option<u64>,
+
+    /// Feed name for per-event enrichment mode (requires --config)
+    #[arg(short, long)]
+    feed: Option<String>,
+
+    /// Path to tendrl.toml configuration file (required for --feed)
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 }
 
 /// Nostr event struct matching the standard JSON format
@@ -159,11 +183,41 @@ fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
 
+    // Determine database path
+    let db_path = if let Some(db) = &args.db {
+        db.clone()
+    } else if let Some(config_path) = &args.config {
+        // Default to ~/.local/share/tendrl/nostrdb if config specified
+        dirs::data_local_dir()
+            .context("Could not determine local data directory")?
+            .join("tendrl")
+            .join("nostrdb")
+            .to_str()
+            .context("Invalid path")?
+            .to_string()
+    } else {
+        anyhow::bail!("Either --db or --config must be specified");
+    };
+
     // Open nostrdb at the specified path
     let config = Config::new();
-    let ndb = Ndb::new(&args.db, &config)
-        .with_context(|| format!("Failed to open nostrdb at {}", args.db))?;
+    let ndb = Ndb::new(&db_path, &config)
+        .with_context(|| format!("Failed to open nostrdb at {}", db_path))?;
 
+    // Check if we're in enrichment mode
+    if let Some(feed_name) = &args.feed {
+        // Per-event enrichment mode
+        query_with_enrichment(&ndb, &args, feed_name)?;
+    } else {
+        // Independent stream mode
+        query_independent(&ndb, &args)?;
+    }
+
+    Ok(())
+}
+
+/// Independent stream mode: query and output events as-is
+fn query_independent(ndb: &Ndb, args: &Args) -> Result<()> {
     // Build filter from arguments
     let mut filter_builder = FilterBuilder::new();
 
@@ -195,7 +249,7 @@ fn main() -> Result<()> {
     let filter = filter_builder.build();
 
     // Execute query
-    let txn = Transaction::new(&ndb)
+    let txn = Transaction::new(ndb)
         .context("Failed to create transaction")?;
 
     let results = ndb.query(&txn, &[filter], args.limit as i32)
@@ -209,6 +263,69 @@ fn main() -> Result<()> {
             .context("Failed to serialize event to JSON")?;
 
         println!("{}", json);
+    }
+
+    Ok(())
+}
+
+/// Per-event enrichment mode: query root events and enrich with dependencies
+fn query_with_enrichment(ndb: &Ndb, args: &Args, feed_name: &str) -> Result<()> {
+    // Load tendrl config
+    let config_path = args.config.as_ref()
+        .context("--config is required when using --feed")?;
+
+    let tendrl_config = TendrlConfig::load_from_path(config_path)
+        .context("Failed to load tendrl.toml")?;
+
+    // Get feed definition
+    let feed = tendrl_config.get_feed(feed_name)
+        .with_context(|| format!("Feed '{}' not found in config", feed_name))?;
+
+    // Check if feed has root config (required for enrichment)
+    let root_config = feed.root.as_ref()
+        .with_context(|| format!("Feed '{}' has no root configuration (not enrichable)", feed_name))?;
+
+    // Build filter for root events only
+    let mut filter_builder = FilterBuilder::new();
+    filter_builder = filter_builder.kinds(feed.display_kinds.clone());
+
+    // Add time range filters if specified
+    if let Some(since) = args.since {
+        filter_builder = filter_builder.since(since);
+    }
+
+    if let Some(until) = args.until {
+        filter_builder = filter_builder.until(until);
+    }
+
+    // Add limit
+    filter_builder = filter_builder.limit(args.limit as u64);
+
+    // Build the filter
+    let filter = filter_builder.build();
+
+    // Execute query for root events
+    let txn = Transaction::new(ndb)
+        .context("Failed to create transaction")?;
+
+    let root_events = ndb.query(&txn, &[filter], args.limit as i32)
+        .context("Query failed")?;
+
+    // Create enrichment engine
+    let engine = EnrichmentEngine::new(ndb, root_config);
+
+    // Enrich each root event and output
+    for query_result in root_events {
+        match engine.enrich_event(&query_result.note, &txn) {
+            Ok(enriched) => {
+                let json = serde_json::to_string(&enriched)
+                    .context("Failed to serialize enriched event")?;
+                println!("{}", json);
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to enrich event {}: {}", hex::encode(query_result.note.id()), e);
+            }
+        }
     }
 
     Ok(())

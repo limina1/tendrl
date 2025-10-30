@@ -4419,6 +4419,7 @@ name = "tendrl_core"
 version = "0.1.0"
 dependencies = [
  "enostr",
+ "hex",
  "nostr 0.37.0",
  "nostrdb",
  "notedeck",
@@ -4455,10 +4456,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dirs",
  "hex",
  "nostrdb",
  "serde",
  "serde_json",
+ "tendrl_core",
 ]
 
 [[package]]
