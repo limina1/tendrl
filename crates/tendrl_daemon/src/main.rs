@@ -29,12 +29,14 @@
 
 use enostr::{RelayEvent, RelayMessage, RelayPool};
 use notedeck::tendrl_config::TendrlConfig;
-use notedeck::{tendrl_feed, NoteCache, UnknownIds};
-use notedeck_columns::timeline::{Timeline, TimelineKind};
+use notedeck::{tendrl_feed, NoteCache};
 use nostrdb::{Config, Ndb, Transaction};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
+use tendrl_core::{Timeline, TimelineKind, TimelineTab};
+// UnknownIds is re-exported from notedeck via tendrl_core
+use notedeck::UnknownIds;
 use tracing::{debug, error, info, warn};
 
 /// Main daemon entry point - initializes components and runs the event loop
@@ -120,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut timeline = Timeline::new(
                 timeline_kind,
                 notedeck::FilterState::ready_hybrid(filter.clone()),
-                notedeck_columns::timeline::TimelineTab::full_tabs(),
+                TimelineTab::full_tabs(),
             );
 
             // Setup local nostrdb subscription for backfill from existing events

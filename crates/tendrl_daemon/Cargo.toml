@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 tendrl_core = { workspace = true }
 nostrdb = { workspace = true }
+enostr = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -20,3 +21,6 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 hex = { workspace = true }
 uuid = { workspace = true }
+
+# Primus dependencies (temporary until fully migrated)
+notedeck = { path = "../../../primus/crates/notedeck" }

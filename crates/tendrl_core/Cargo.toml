@@ -11,3 +11,10 @@ serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 nostrdb = { workspace = true }
+enostr = { workspace = true }
+nostr = { workspace = true }
+notedeck = { workspace = true }
+notedeck_ui = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+profiling = { version = "1", default-features = false }
