@@ -36,23 +36,23 @@ kind = 0
 relation = "author"
 required = false
 
-# Aggregate reaction counts
+# Aggregate reaction counts with user breakdown
 [feed.notes_enriched.root.deps.reactions]
 kind = 7
 relation = "e_tag"
 mode = "aggregate"
-stats = ["count", "by_content"]
+stats = ["count", "by_content"]  # by_content includes {emoji: {count, users}}
 
-# Aggregate zap stats
+# Aggregate zap stats with per-user amounts
 [feed.notes_enriched.root.deps.zaps]
 kind = 9735
 relation = "e_tag"
 mode = "aggregate"
-stats = ["count", "total_sats"]
+stats = ["count", "total_sats", "by_user"]  # by_user: [{pubkey, amount}, ...]
 
-# Aggregate repost count
+# Aggregate repost count with user list
 [feed.notes_enriched.root.deps.reposts]
 kind = 6
 relation = "e_tag"
 mode = "aggregate"
-stats = ["count"]
+stats = ["count", "users"]  # users: [pubkey1, pubkey2, ...]

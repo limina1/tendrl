@@ -163,11 +163,12 @@ impl<'a> EnrichmentEngine<'a> {
 
         match mode {
             "aggregate" => {
+                // Compute structured stats (includes user lists, amounts, etc.)
                 let stats = aggregate_stats(&notes, &dep_config.stats);
                 enriched.stats.insert(dep_name.to_string(), serde_json::to_value(stats).unwrap());
             }
             "expanded" => {
-                // Include full events
+                // Include full events only (no stats)
                 let events: Vec<serde_json::Value> = notes.iter()
                     .filter_map(|n| note_to_json_simple(n).ok())
                     .collect();
@@ -202,20 +203,62 @@ fn aggregate_stats(notes: &[Note], stat_types: &[String]) -> HashMap<String, ser
                 stats.insert("count".to_string(), serde_json::json!(notes.len()));
             }
             "by_content" => {
-                // Group by content field (for reactions)
-                let mut content_counts: HashMap<String, usize> = HashMap::new();
+                // Group by content field with user lists (for reactions)
+                let mut content_groups: HashMap<String, Vec<String>> = HashMap::new();
                 for note in notes {
                     let content = note.content().to_string();
-                    *content_counts.entry(content).or_insert(0) += 1;
+                    let pubkey = hex::encode(note.pubkey());
+                    content_groups.entry(content).or_insert_with(Vec::new).push(pubkey);
                 }
-                stats.insert("by_content".to_string(), serde_json::to_value(content_counts).unwrap());
+
+                // Format as {emoji: {count: N, users: [...]}}
+                let formatted: HashMap<String, serde_json::Value> = content_groups
+                    .into_iter()
+                    .map(|(content, users)| {
+                        (content, serde_json::json!({
+                            "count": users.len(),
+                            "users": users
+                        }))
+                    })
+                    .collect();
+
+                stats.insert("by_content".to_string(), serde_json::to_value(formatted).unwrap());
             }
             "total_sats" => {
-                // Sum sats from zap receipts (bolt11 invoice amounts)
+                // Sum sats from zap receipts
                 let total: u64 = notes.iter()
                     .filter_map(|n| extract_zap_amount(n))
                     .sum();
                 stats.insert("total_sats".to_string(), serde_json::json!(total));
+            }
+            "by_user" => {
+                // Group by user (for zaps, reposts)
+                let by_user: Vec<serde_json::Value> = notes.iter()
+                    .map(|note| {
+                        let pubkey = hex::encode(note.pubkey());
+                        let amount = extract_zap_amount(note);
+
+                        if let Some(sats) = amount {
+                            serde_json::json!({
+                                "pubkey": pubkey,
+                                "amount": sats
+                            })
+                        } else {
+                            serde_json::json!({
+                                "pubkey": pubkey
+                            })
+                        }
+                    })
+                    .collect();
+
+                stats.insert("by_user".to_string(), serde_json::to_value(by_user).unwrap());
+            }
+            "users" => {
+                // Just list of pubkeys (for reposts)
+                let users: Vec<String> = notes.iter()
+                    .map(|note| hex::encode(note.pubkey()))
+                    .collect();
+                stats.insert("users".to_string(), serde_json::to_value(users).unwrap());
             }
             _ => {
                 tracing::warn!("Unknown stat type: {}", stat_type);
