@@ -1,9 +1,28 @@
 # Test configuration for per-event enrichment
 
+npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+pubkey = "dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06"
+name = "liminal"
+# Database path
+db_path = "/home/user/.local/share/tendrl/nostrdb"
+
+# Profile fetcher relays - specialized indexers for kind-0 events
+[profile_fetchers]
+relays = [
+    "wss://purplepag.es",           # Profile indexer
+    "wss://indexer.coracle.social", # Profile indexer
+    "wss://user.kindpag.es",        # Profile indexer
+    "wss://relay.nostr.band",       # General relay with profiles
+    "wss://relay.damus.io",          # General relay
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com"
+]
+
 [feed.notes_enriched]
 name = "Notes with Engagement"
 description = "Notes enriched with reactions, zaps, and author profiles"
 display_kinds = [1]
+mode = "follows"
 relay_mode = "general"
 fetch_strategy = "stream"
 
@@ -11,6 +30,9 @@ fetch_strategy = "stream"
 filter_type = "hybrid"
 
 # Fetch notes + all their dependencies
+# To filter by specific author, add: authors = ["hex_pubkey_here"]
+# Example npub: npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf
+# (Convert using: echo "npub1..." | nak decode)
 [[feed.notes_enriched.pattern.local_queries]]
 kinds = [1]
 limit = 100

@@ -1,5 +1,6 @@
 use crate::filter::HybridFilter;
 use nostrdb::{Filter, Subscription};
+use std::collections::HashMap;
 
 /// Filter construction errors
 #[derive(Debug, Clone, Copy, Eq, PartialEq, thiserror::Error)]
@@ -86,5 +87,55 @@ impl FilterState {
             remote: sub_id,
         };
         Self::FetchingRemote(FetchingRemoteType::Normal(unified_sub))
+    }
+}
+
+/// Container for multiple filter states (per relay + initial)
+#[derive(Debug, Clone)]
+pub struct FilterStates {
+    pub initial_state: FilterState,
+    pub states: HashMap<String, FilterState>,
+}
+
+impl FilterStates {
+    pub fn new(initial_state: FilterState) -> Self {
+        FilterStates {
+            initial_state,
+            states: HashMap::new(),
+        }
+    }
+
+    pub fn ready_hybrid(filter: HybridFilter) -> Self {
+        FilterStates {
+            initial_state: FilterState::Ready(filter),
+            states: HashMap::new(),
+        }
+    }
+
+    pub fn get_mut(&mut self, relay: &str) -> &FilterState {
+        // if our initial state is ready, then just use that
+        if let FilterState::Ready(_) = self.initial_state {
+            &self.initial_state
+        } else {
+            // otherwise we look at relay states
+            if !self.states.contains_key(relay) {
+                self.states
+                    .insert(relay.to_string(), self.initial_state.clone());
+            }
+            self.states.get(relay).unwrap()
+        }
+    }
+
+    pub fn get_any_ready(&self) -> Option<&HybridFilter> {
+        if let FilterState::Ready(fs) = &self.initial_state {
+            Some(fs)
+        } else {
+            for (_k, v) in self.states.iter() {
+                if let FilterState::Ready(ref fs) = v {
+                    return Some(fs);
+                }
+            }
+            None
+        }
     }
 }

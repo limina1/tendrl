@@ -1,0 +1,12 @@
+⚡ {{ total_sats|default(0)|format_sats }} ({{ count|default(0) }} zaps)
+{% if details -%}
+{%- for zap in details[:10] %}
+├─ {{ zap.zapper_name or "Unknown" }}: {{ zap.amount|default(0)|format_sats }}
+{%- if zap.comment %} "{{ zap.comment|truncate_content(30) }}"{% endif %}
+{% endfor -%}
+{%- if count > 10 %}
+└─ [{{ count - 10 }} more zaps...]
+{%- endif %}
+{%- else %}
+No detailed zap information available
+{%- endif %}

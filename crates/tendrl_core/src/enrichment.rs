@@ -70,6 +70,10 @@ impl<'a> EnrichmentEngine<'a> {
             }
         }
 
+        // AUTOMATIC PROFILE ENRICHMENT: Extract all pubkeys from stats and fetch profiles
+        // Always includes the note author + any users who engaged (reacted, zapped, reposted)
+        self.enrich_profiles(&mut enriched_data, root_event, txn)?;
+
         Ok(EnrichedEvent {
             event: event_json,
             enriched: enriched_data,
@@ -149,6 +153,71 @@ impl<'a> EnrichmentEngine<'a> {
         // TODO: Implement p-tag extraction properly
         // For now, return empty vec
         Ok(vec![])
+    }
+
+    /// Automatically enrich with profiles for all mentioned users
+    fn enrich_profiles(&self, enriched: &mut EnrichmentData, root_event: &Note, txn: &Transaction) -> Result<(), EnrichmentError> {
+        // Extract all pubkeys from stats
+        let mut pubkeys = std::collections::HashSet::new();
+
+        // ALWAYS include the note author's pubkey
+        pubkeys.insert(hex::encode(root_event.pubkey()));
+
+        // Also extract pubkeys from engagement stats (reactions, zaps, reposts)
+        for (_stat_name, stat_value) in &enriched.stats {
+            extract_pubkeys_from_value(stat_value, &mut pubkeys);
+        }
+
+        if pubkeys.is_empty() {
+            return Ok(());
+        }
+
+        // Convert hex pubkeys to bytes
+        let pubkey_bytes: Vec<[u8; 32]> = pubkeys.iter()
+            .filter_map(|pk_hex| {
+                if pk_hex.len() != 64 {
+                    return None;
+                }
+                let bytes = hex::decode(pk_hex).ok()?;
+                let mut array = [0u8; 32];
+                array.copy_from_slice(&bytes);
+                Some(array)
+            })
+            .collect();
+
+        if pubkey_bytes.is_empty() {
+            return Ok(());
+        }
+
+        // Batch fetch all profiles
+        let filter = Filter::new()
+            .kinds(vec![0])
+            .authors(pubkey_bytes.iter().collect::<Vec<_>>())
+            .limit(pubkey_bytes.len() as u64)
+            .build();
+
+        let results = self.ndb
+            .query(txn, &[filter], pubkey_bytes.len() as i32)
+            .map_err(|e| EnrichmentError::QueryFailed(e.to_string()))?;
+
+        // Build profiles map: {pubkey: profile_json}
+        let mut profiles_map = HashMap::new();
+        for query_result in results {
+            let note = query_result.note;
+            let pubkey = hex::encode(note.pubkey());
+
+            // Parse the content field to get profile data
+            if let Ok(content) = serde_json::from_str::<serde_json::Value>(note.content()) {
+                profiles_map.insert(pubkey, content);
+            }
+        }
+
+        // Add profiles to enriched data
+        if !profiles_map.is_empty() {
+            enriched.single.insert("profiles".to_string(), serde_json::to_value(profiles_map).unwrap());
+        }
+
+        Ok(())
     }
 
     /// Attach dependency result to enriched data based on mode
@@ -332,6 +401,40 @@ fn extract_p_tags<'a>(_note: &'a Note<'a>) -> Vec<&'a [u8]> {
     vec![]
 }
 
+/// Recursively extract all pubkey strings from a JSON value
+fn extract_pubkeys_from_value(value: &serde_json::Value, pubkeys: &mut std::collections::HashSet<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, val) in map {
+                // If the key suggests it's a pubkey field, extract the value
+                if key == "pubkey" || key == "users" {
+                    if let serde_json::Value::String(pk) = val {
+                        if pk.len() == 64 {
+                            pubkeys.insert(pk.clone());
+                        }
+                    } else if let serde_json::Value::Array(arr) = val {
+                        for item in arr {
+                            if let serde_json::Value::String(pk) = item {
+                                if pk.len() == 64 {
+                                    pubkeys.insert(pk.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                // Recursively search nested objects
+                extract_pubkeys_from_value(val, pubkeys);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                extract_pubkeys_from_value(item, pubkeys);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Convert Note to JSON with full transaction context
 fn note_to_json(note: &Note, _txn: &Transaction) -> Result<serde_json::Value, EnrichmentError> {
     note_to_json_simple(note)
@@ -344,8 +447,19 @@ fn note_to_json_simple(note: &Note) -> Result<serde_json::Value, EnrichmentError
         .tags()
         .iter()
         .map(|tag| {
-            tag.into_iter()
-                .filter_map(|item| item.str().map(|s| s.to_string()))
+            (0..tag.count())
+                .filter_map(|i| {
+                    tag.get(i).map(|ndb_str| {
+                        // NdbStr can be either a string or an ID (32-byte array)
+                        if let Some(s) = ndb_str.str() {
+                            s.to_string()
+                        } else if let Some(id) = ndb_str.id() {
+                            hex::encode(id)
+                        } else {
+                            String::new()
+                        }
+                    })
+                })
                 .collect()
         })
         .collect();

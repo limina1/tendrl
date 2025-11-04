@@ -1,0 +1,399 @@
+#+TITLE: Consolidation Plan: nostr-feeds → Tendrl
+#+DATE: 2025-10-31
+#+AUTHOR: Strategic Architecture Plan
+
+* Vision
+
+Consolidate the proven patterns from ~nostr-feeds~ into Tendrl, using nostrdb for efficiency while maintaining the config-driven, modular architecture that works.
+
+**Goal**: One unified system with:
+- ✓ nostrdb's speed and efficiency (LMDB, native Rust)
+- ✓ nostr-feeds' proven patterns (config-driven, modular)
+- ✓ Notedeck integration for UI
+- ✓ Jinja2 rendering for flexibility
+
+* Current State
+
+** nostr-feeds (Mature)
+- 3 years production use
+- Config-driven architecture
+- nak + SQLite + Jinja2
+- Multiple output formats (text, HTML, SPA, JSON API)
+- Proven enrichment algorithms
+- ~33 Python modules
+
+** Tendrl (Evolving)
+- nostrdb + notedeck integration
+- TOML-driven feed definitions (~tendrl.toml~)
+- Rust query engine (~tendrl_query~)
+- Feed injection for Notedeck
+- Has tag value bug (blocking)
+
+* The Hybrid Path: Best of Both Worlds
+
+Instead of choosing one or the other, create a **layered architecture**:
+
+#+begin_example
+┌─────────────────────────────────────────────────┐
+│  UI Layer (Notedeck, Browser, Emacs, TUI)      │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│  Rendering Layer (Jinja2 templates)             │
+│  - Plain text with semantic markers             │
+│  - HTML for browsers                            │
+│  - JSON for APIs                                │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│  Enrichment Layer (Python - from nostr-feeds)   │
+│  - Dependency tree traversal                    │
+│  - Profile resolution                           │
+│  - Aggregation (reactions, zaps, replies)       │
+│  - Follow list filtering                        │
+└─────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────┐
+│  Query Abstraction Layer (NEW!)                 │
+│  - Unified query interface                      │
+│  - Backend-agnostic                             │
+└─────────────────────────────────────────────────┘
+            ↓                    ↓
+┌──────────────────┐    ┌────────────────────────┐
+│ nostrdb Backend  │    │ SQLite Backend         │
+│ (fast, native)   │    │ (proven, reliable)     │
+│ - LMDB storage   │    │ - JSON tags work       │
+│ - Rust queries   │    │ - Fallback option      │
+└──────────────────┘    └────────────────────────┘
+#+end_example
+
+* Phase 1: Create Query Abstraction Layer
+
+Create a Python interface that can work with either backend:
+
+#+begin_src python
+# tendrl/query_backend.py
+
+from abc import ABC, abstractmethod
+from typing import List, Dict, Optional
+
+class QueryBackend(ABC):
+    """Abstract interface for event queries"""
+
+    @abstractmethod
+    def query_events(self, kinds: List[int], authors: Optional[List[str]] = None,
+                     limit: int = 100, since: Optional[int] = None,
+                     until: Optional[int] = None) -> List[Dict]:
+        """Query events with filters"""
+        pass
+
+    @abstractmethod
+    def get_event_by_id(self, event_id: str) -> Optional[Dict]:
+        """Get single event by ID"""
+        pass
+
+    @abstractmethod
+    def get_events_by_tag(self, kind: int, tag_type: str,
+                          tag_value: str, limit: int = 100) -> List[Dict]:
+        """Query events by tag reference"""
+        pass
+
+
+class NostrdbBackend(QueryBackend):
+    """Backend using nostrdb (fast, when working)"""
+
+    def __init__(self, db_path: str, config_path: str):
+        self.db_path = db_path
+        self.config_path = config_path
+
+    def query_events(self, kinds, authors=None, limit=100, since=None, until=None):
+        # Use tendrl_query binary
+        cmd = ['./tendrl/target/release/tendrl_query',
+               '--config', self.config_path,
+               '--kinds', ','.join(map(str, kinds)),
+               '--limit', str(limit)]
+
+        if authors:
+            for author in authors:
+                cmd.extend(['--author', author])
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return [json.loads(line) for line in result.stdout.strip().split('\n') if line]
+
+
+class SqliteBackend(QueryBackend):
+    """Backend using SQLite (proven, reliable)"""
+
+    def __init__(self, db_path: str):
+        self.conn = sqlite3.connect(db_path)
+        self.conn.row_factory = sqlite3.Row
+
+    def query_events(self, kinds, authors=None, limit=100, since=None, until=None):
+        # Use nostr-feeds proven query logic
+        query = "SELECT * FROM events WHERE kind IN ({})".format(
+            ','.join('?' * len(kinds))
+        )
+        params = list(kinds)
+
+        if authors:
+            query += " AND pubkey IN ({})".format(','.join('?' * len(authors)))
+            params.extend(authors)
+
+        if since:
+            query += " AND created_at >= ?"
+            params.append(since)
+
+        if until:
+            query += " AND created_at <= ?"
+            params.append(until)
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        cursor = self.conn.execute(query, params)
+        return [self._parse_row(row) for row in cursor.fetchall()]
+
+    def _parse_row(self, row):
+        event = dict(row)
+        if 'tags_json' in event and event['tags_json']:
+            event['tags'] = json.loads(event['tags_json'])
+        return event
+#+end_src
+
+* Phase 2: Port nostr-feeds Enrichment to Tendrl
+
+** Directory Structure
+#+begin_example
+tendrl/
+├── tendrl.toml               # Config (already exists)
+├── tendrl/                   # Rust crates
+│   ├── tendrl_query          # Query binary
+│   ├── tendrl_ingest         # Ingest binary
+│   └── tendrl_daemon         # Background daemon
+├── python/                   # NEW: Python enrichment layer
+│   ├── __init__.py
+│   ├── query_backend.py      # Abstraction layer
+│   ├── enricher.py           # Port from nostr-feeds
+│   ├── renderer.py           # Port from nostr-feeds
+│   ├── follows.py            # Port from nostr-feeds
+│   ├── profiles.py           # Port from nostr-feeds
+│   └── config.py             # Read tendrl.toml
+├── templates/                # Jinja2 templates
+│   └── *.j2
+└── scripts/
+    └── tendrl_render.py      # Rendering CLI
+#+end_example
+
+** Port Core Modules
+
+1. *enricher.py* - Dependency tree traversal (nostr-feeds/enricher/enricher.py)
+2. *follows.py* - Follow list management (nostr-feeds/enricher/follows.py)
+3. *profiles.py* - Profile caching (nostr-feeds/enricher/profiles.py)
+4. *renderer.py* - Jinja2 rendering (nostr-feeds/enricher/renderer.py)
+
+** Keep What Works from nostr-feeds
+
+- Config-driven feed definitions
+- Dependency tree traversal algorithms
+- Aggregation logic (reactions, zaps, replies)
+- Profile two-tier caching
+- Jinja2 template system
+
+** Enhance with Tendrl Features
+
+- TOML config format (more expressive than Python dicts)
+- Notedeck integration for UI
+- Hybrid backend support (nostrdb + SQLite fallback)
+
+* Phase 3: Dual Backend Strategy
+
+** Development Mode: Use SQLite Backend
+While debugging nostrdb tag issues, use proven SQLite backend:
+
+#+begin_src toml
+# tendrl.toml
+[database]
+backend = "sqlite"  # or "nostrdb"
+sqlite_path = "~/.local/share/tendrl/feeds.db"
+nostrdb_path = "~/.local/share/tendrl/nostrdb"
+#+end_src
+
+** Production Mode: Use nostrdb Backend
+Once tag bug is fixed, switch to nostrdb for speed:
+
+#+begin_src python
+# Auto-detect and fallback
+if config.database.backend == "nostrdb":
+    try:
+        backend = NostrdbBackend(config.database.nostrdb_path)
+        # Test if tags work
+        test_event = backend.get_event_by_id(test_id)
+        if not test_event.get('tags') or not test_event['tags'][0][1]:
+            raise ValueError("nostrdb tag bug still present")
+    except Exception as e:
+        print(f"⚠️  Falling back to SQLite: {e}")
+        backend = SqliteBackend(config.database.sqlite_path)
+else:
+    backend = SqliteBackend(config.database.sqlite_path)
+#+end_src
+
+* Phase 4: Notedeck Integration
+
+** Feed Injection Pattern
+Notedeck reads ~tendrl.toml~ at startup and injects custom feeds:
+
+#+begin_src rust
+// In primus/notedeck - already implemented
+pub fn load_tendrl_config(data_dir: &Path) -> Result<TendrlConfig> {
+    let config_path = data_dir.join("tendrl.toml");
+    let config: TendrlConfig = toml::from_str(&fs::read_to_string(config_path)?)?;
+
+    // Parse [feed.*] sections
+    for (feed_id, feed_def) in config.feeds {
+        // Build HybridFilter from feed_def.pattern
+        // Inject into TimelineKind enum
+        // Add to column picker
+    }
+}
+#+end_src
+
+** Query from Python Enricher
+Notedeck queries nostrdb natively, but Python enricher can:
+1. Query via ~tendrl_query~ binary (subprocess)
+2. Query via SQLite fallback
+3. Use cached results
+
+** Rendering Pipeline
+#+begin_example
+User clicks feed in Notedeck
+     ↓
+Notedeck queries nostrdb (native Rust)
+     ↓
+Passes events to Python enricher (via JSON)
+     ↓
+Python enriches with deps (profiles, reactions, etc)
+     ↓
+Returns enriched data to Notedeck
+     ↓
+Notedeck renders in egui UI
+#+end_example
+
+* Phase 5: Migration Checklist
+
+** Immediate Actions
+- [X] Document architecture comparison
+- [X] Identify root cause (tag serialization bug)
+- [ ] Create query abstraction layer
+- [ ] Port enricher.py from nostr-feeds
+- [ ] Port follows.py with SQLite backend
+
+** Short Term (1-2 weeks)
+- [ ] Implement dual backend support
+- [ ] Test with SQLite backend (proven to work)
+- [ ] Port remaining modules (profiles, renderer)
+- [ ] Create integration tests
+
+** Medium Term (1 month)
+- [ ] Debug nostrdb tag serialization bug
+- [ ] Fix tendrl_query to preserve tag values
+- [ ] Switch to nostrdb backend
+- [ ] Benchmark performance improvement
+
+** Long Term (ongoing)
+- [ ] Full Notedeck integration
+- [ ] Browser SPA using tendrl backend
+- [ ] Mobile client support
+- [ ] Real-time subscriptions
+
+* Implementation Strategy
+
+** Step 1: Create Minimal Working System
+Use SQLite backend with nostr-feeds patterns:
+
+#+begin_src bash
+# 1. Port core modules
+cp nostr-feeds/enricher/enricher.py tendrl/python/enricher.py
+cp nostr-feeds/enricher/follows.py tendrl/python/follows.py
+cp nostr-feeds/enricher/db.py tendrl/python/query_backend.py
+
+# 2. Create SQLite database
+python3 -m tendrl.python.init_db ~/.local/share/tendrl/feeds.db
+
+# 3. Fetch events using nak (proven to work)
+nak req -k 1,6 --limit 100 wss://relay.damus.io | \
+  python3 -m tendrl.python.ingest
+
+# 4. Render feed
+python3 -m tendrl.python.render --feed contacts --limit 50
+#+end_src
+
+** Step 2: Add nostrdb Backend
+Once working with SQLite, add nostrdb as optional backend:
+
+#+begin_src python
+# Auto-detect backend capability
+def create_backend(config):
+    if config.backend == "nostrdb" and nostrdb_tags_work():
+        return NostrdbBackend(config)
+    else:
+        return SqliteBackend(config)
+#+end_src
+
+** Step 3: Integrate with Notedeck
+Notedeck uses nostrdb natively, Python enricher adds intelligence:
+
+#+begin_example
+Notedeck (Rust)  →  nostrdb queries  →  JSON output
+                          ↓
+                   Python enricher
+                   (adds profiles, stats, deps)
+                          ↓
+                   Back to Notedeck
+                          ↓
+                   Render in egui UI
+#+end_example
+
+* Success Metrics
+
+** Working System
+- [ ] Can fetch follow list (533 follows for liminal)
+- [ ] Can filter feeds by follows
+- [ ] Can enrich events with profiles
+- [ ] Can aggregate reactions/zaps/replies
+- [ ] Can render with Jinja2 templates
+
+** Performance Goals
+- [ ] Query latency < 50ms (nostrdb target)
+- [ ] Enrichment latency < 100ms per event
+- [ ] Support 1000+ events in feed
+- [ ] Memory usage < 500MB
+
+** Feature Parity
+- [ ] All nostr-feeds features working
+- [ ] Notedeck integration functional
+- [ ] Config-driven feed definitions
+- [ ] Multiple output formats
+
+* Why This Approach Works
+
+1. **Incremental Migration**: Start with proven SQLite, migrate to nostrdb when ready
+2. **Backend Abstraction**: Code doesn't care which database is used
+3. **Best of Both**: Keep nostr-feeds' algorithms, add nostrdb's speed
+4. **Unblocks Progress**: Don't wait for bug fix to make progress
+5. **Risk Mitigation**: Always have SQLite fallback
+
+* Next Session TODO
+
+1. Create ~tendrl/python/~ directory
+2. Port ~query_backend.py~ with dual backend support
+3. Port ~follows.py~ from nostr-feeds
+4. Test follow list fetching with SQLite backend
+5. Create CLI tool: ~tendrl render --feed contacts --limit 50~
+
+Once this works, you have:
+- ✓ Proven patterns from nostr-feeds
+- ✓ Config-driven architecture from Tendrl
+- ✓ Path to nostrdb optimization
+- ✓ Unblocked development
+
+The consolidation happens gradually, not all at once.

@@ -1,9 +1,7 @@
 # Rust build artifacts
 /target/
 **/target/
-
-# Cargo.lock for libraries (keep for binaries)
-# Cargo.lock
+Cargo.lock
 
 # Environment variables
 .env
@@ -17,11 +15,43 @@
 *~
 .DS_Store
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+env/
+ENV/
+
 # Tendrl runtime data
 tendrl_data/
 *.db
 *.lmdb
 *.mdb
+
+# nostrdb database directory
+nostrdb/
+
+# Output directories
+public/
+output/
 
 # Logs
 *.log
@@ -29,3 +59,12 @@ tendrl_data/
 # Temporary files
 *.tmp
 *.temp
+
+# Generated HTML/JSON files
+*.html
+*.json
+!tendrl_enricher/**/*.json
+!examples/*.toml
+
+# Test outputs
+test_output.txt

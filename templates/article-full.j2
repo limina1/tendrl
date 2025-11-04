@@ -1,0 +1,58 @@
+{# Full article template for NIP-23 (kind 30023) - used when focused/standalone #}
+{# Extract article metadata from tags #}
+{%- set title = '' -%}
+{%- set summary = '' -%}
+{%- set published_at = '' -%}
+{%- set image = '' -%}
+{%- set hashtags = [] -%}
+{%- for tag in event.tags -%}
+  {%- if tag[0] == 'title' and tag|length > 1 -%}
+    {%- set title = tag[1] -%}
+  {%- elif tag[0] == 'summary' and tag|length > 1 -%}
+    {%- set summary = tag[1] -%}
+  {%- elif tag[0] == 'published_at' and tag|length > 1 -%}
+    {%- set published_at = tag[1]|int -%}
+  {%- elif tag[0] == 'image' and tag|length > 1 -%}
+    {%- set image = tag[1] -%}
+  {%- elif tag[0] == 't' and tag|length > 1 -%}
+    {%- set _ = hashtags.append(tag[1]) -%}
+  {%- endif -%}
+{%- endfor -%}
+
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "article", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "title": title, "has_image": (image|length > 0), "depth": meta.depth|default(0)}|to_json }}>>>
+════════════════════════════════════════════════════════════════
+📄 {{ title or 'Untitled Article' }}
+════════════════════════════════════════════════════════════════
+
+{% if deps.author -%}
+✍️  {{ deps.author.display_name or deps.author.name or 'Unknown' }} (<<<PROFILE:{{ deps.author.pubkey|to_npub|to_nostr_uri }}>>>@{{ deps.author.name or 'unknown' }}<<</PROFILE>>>)
+{%- endif %}
+{% if published_at -%}
+📅 Published: {{ published_at|format_relative_time }}
+{%- elif event.created_at -%}
+📅 Published: {{ event.created_at|format_relative_time }}
+{%- endif %}
+
+{% if summary -%}
+{{ summary }}
+
+{%- endif %}
+{% if image -%}
+<<<IMAGE:{{ image }}>>>🖼️ [Image]<<</IMAGE>>>
+
+{%- endif %}
+────────────────────────────────────────────────────────────────
+
+{{ event.content|linkify }}
+
+────────────────────────────────────────────────────────────────
+{% if hashtags -%}
+🏷️  {% for tag in hashtags %}<<<HASHTAG:{{ tag }}>>>#{{ tag }}<<</HASHTAG>>>{% if not loop.last %} {% endif %}{% endfor %}
+
+{%- endif %}
+{% if deps.reactions or deps.replies or deps.zaps -%}
+{% if deps.reactions %}<<<STAT:reactions:{{ deps.reactions.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>❤️ {{ deps.reactions.count }}<<</STAT>>>  {% endif %}{% if deps.replies %}<<<STAT:replies:{{ deps.replies.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>💬 {{ deps.replies.count }}<<</STAT>>>  {% endif %}{% if deps.zaps %}<<<STAT:zaps:{{ deps.zaps.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>⚡ {{ deps.zaps.total_sats|format_sats }}<<</STAT>>>{% endif %}
+{%- endif %}
+════════════════════════════════════════════════════════════════
+<<</EVENT>>>

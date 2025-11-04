@@ -1,0 +1,9 @@
+[package]
+name = "tendrl_ingest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nostrdb = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }

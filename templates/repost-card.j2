@@ -1,0 +1,45 @@
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "repost", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "reposted_event": (deps.reposted_event.id|to_nevent(deps.reposted_event.pubkey)|to_nostr_uri) if deps.reposted_event else "unknown", "depth": meta.depth|default(0)}|to_json }}>>>
+────────────────────────────────────────────────────────────────
+{% if deps.reposted_event -%}
+{% set reposted_kind = deps.reposted_event.kind|default(1) -%}
+│ {% if deps.reposted_author -%}
+{{ deps.reposted_author.display_name or deps.reposted_author.name or "Unknown" }}{% if deps.reposted_author.name %} (@{{ deps.reposted_author.name }}){% endif %}{% if deps.reposted_author.nip05_verified %} ✓ {{ deps.reposted_author.nip05 }}{% endif %}
+{%- else -%}
+<<<UNABLE_TO_FETCH_USER:{{ deps.reposted_event.pubkey[:8] if deps.reposted_event.pubkey else "unknown" }}>>>
+{%- endif %}
+
+│ {{ deps.reposted_event.created_at|format_relative_time }}
+│
+{% if reposted_kind == 30023 -%}
+{# Article repost #}
+{% set article_title = '' -%}
+{% set article_summary = '' -%}
+{% for tag in deps.reposted_event.tags -%}
+  {% if tag[0] == 'title' and tag|length > 1 -%}
+    {% set article_title = tag[1] -%}
+  {% elif tag[0] == 'summary' and tag|length > 1 -%}
+    {% set article_summary = tag[1] -%}
+  {% endif -%}
+{% endfor -%}
+│ 📄 {{ article_title or 'Untitled Article' }}
+│
+│ {% if article_summary %}{{ article_summary|render_nprofiles|linkify|truncate(180) }}{% else %}{{ deps.reposted_event.content|render_nprofiles|linkify|truncate(180) }}{% endif %}
+
+{% else -%}
+{# Regular note #}
+│ {{ deps.reposted_event.content|render_nprofiles|linkify }}
+
+{% endif -%}
+{% else -%}
+│ [Original event not available]
+
+{% endif -%}
+────────────────────────────────────────────────────────────────
+🔁 {% if deps.author -%}
+{{ deps.author.display_name or deps.author.name or "Unknown" }}{% if deps.author.name %} (@{{ deps.author.name }}){% endif %}
+{%- else -%}
+<<<UNABLE_TO_FETCH_USER:{{ event.pubkey[:8] if event.pubkey else "unknown" }}>>>
+{%- endif %} · {{ meta.formatted_time }}
+────────────────────────────────────────────────────────────────
+<<</EVENT>>>

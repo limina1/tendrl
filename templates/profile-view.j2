@@ -1,0 +1,53 @@
+{# Profile View: Header + Top-level Posts #}
+{# Used for --profile mode to display user's profile and recent posts #}
+
+{# Render profile header if profile data exists #}
+{% if profile -%}
+<<<PROFILE:{{ profile.pubkey|to_npub|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "profile_header", "picture": profile.picture, "banner": profile.banner, "name": profile.name, "display_name": profile.display_name, "nip05": profile.nip05, "nip05_verified": profile.nip05_verified, "lightning_address": profile.lightning_address}|to_json }}>>>
+════════════════════════════════════════════════════════════════
+{{ profile.display_name or profile.name or "Unknown User" }}
+{%- if profile.name %} (@{{ profile.name }}){% endif %}
+{%- if profile.nip05_verified %} ✓ {{ profile.nip05 }}{% endif %}
+
+{% if profile.about -%}
+{{ profile.about }}
+{% endif -%}
+
+{% if profile.lightning_address -%}
+⚡ {{ profile.lightning_address }}
+{% endif -%}
+
+📍 {{ profile.pubkey|to_npub }}
+════════════════════════════════════════════════════════════════
+<<</PROFILE>>>
+
+{% endif -%}
+{# Render posts using standard note card template #}
+{% for enriched in posts -%}
+<<<EVENT:{{ enriched.event.id|to_nevent(enriched.event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "note", "author": (enriched.deps.author.pubkey|to_npub|to_nostr_uri) if enriched.deps.author else "unknown", "depth": enriched.meta.depth|default(0)}|to_json }}>>>
+────────────────────────────────────────────────────────────────
+{% if enriched.deps.author -%}
+{{ enriched.deps.author.display_name or enriched.deps.author.name or "Unknown" }} (@{{ enriched.deps.author.name or "unknown" }})
+{%- if enriched.deps.author.nip05_verified %} ✓ {{ enriched.deps.author.nip05 }}{% endif %}
+{%- else -%}
+Unknown Author
+{%- endif %}
+{{ enriched.meta.formatted_time }}
+
+{{ enriched.event.content }}
+
+{% if enriched.deps.reactions and enriched.deps.reactions.count > 0 -%}
+<<<STAT:reactions:{{ enriched.deps.reactions.count }}:{{ enriched.event.id|to_nevent(enriched.event.pubkey)|to_nostr_uri }}>>>❤️ {{ enriched.deps.reactions.count }}<<</STAT>>>
+{%- endif %}
+{%- if enriched.deps.replies and enriched.deps.replies.count > 0 %}  <<<STAT:replies:{{ enriched.deps.replies.count }}:{{ enriched.event.id|to_nevent(enriched.event.pubkey)|to_nostr_uri }}>>>💬 {{ enriched.deps.replies.count }}<<</STAT>>>
+{%- endif %}
+{%- if enriched.deps.zaps and enriched.deps.zaps.count > 0 %}  <<<STAT:zaps:{{ enriched.deps.zaps.total_sats|default(0) }}:{{ enriched.event.id|to_nevent(enriched.event.pubkey)|to_nostr_uri }}>>>⚡ {{ enriched.deps.zaps.total_sats|default(0)|format_sats }}<<</STAT>>>
+{%- endif %}
+{%- if enriched.deps.reposts and enriched.deps.reposts.count > 0 %}  <<<STAT:reposts:{{ enriched.deps.reposts.count }}:{{ enriched.event.id|to_nevent(enriched.event.pubkey)|to_nostr_uri }}>>>🔁 {{ enriched.deps.reposts.count }}<<</STAT>>>
+{%- endif %}
+────────────────────────────────────────────────────────────────
+<<</EVENT>>>
+
+{% endfor -%}

@@ -76,6 +76,21 @@ impl UnknownIds {
         get_unknown_ids_filter(&ids)
     }
 
+    /// Update unknown IDs from a note (stub implementation)
+    pub fn update_from_note(
+        _txn: &Transaction,
+        _ndb: &Ndb,
+        unknown_ids: &mut UnknownIds,
+        _note_cache: &mut crate::NoteCache,
+        _note: &nostrdb::Note,
+    ) -> bool {
+        // Stub: In a full implementation, this would extract pubkeys and note IDs
+        // from the note and add them to unknown_ids if not found in the database
+        // For now, just mark as updated to avoid errors
+        unknown_ids.mark_updated();
+        false
+    }
+
     /// Mark that IDs have been updated
     ///
     /// Updates timestamps for debouncing logic

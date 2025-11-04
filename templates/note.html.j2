@@ -1,0 +1,181 @@
+{# Tendrl Enriched Note Template
+
+   This template renders a single Nostr note with full enrichment data.
+   Data structure matches tendrl_core/src/enrichment.rs output.
+
+   Usage:
+     {{ note|render_note }}
+
+   Or render the template directly:
+     {% include 'note.html.j2' %}
+#}
+
+<article class="note" data-note-id="{{ note.id }}">
+  {# Note header with author info #}
+  <header class="note-header">
+    <div class="note-author">
+      {% if note._enriched.single and note._enriched.single.profiles and note._enriched.single.profiles[note.pubkey] %}
+        {% set profile = note._enriched.single.profiles[note.pubkey] %}
+        <img
+          src="{{ profile.picture | default('https://via.placeholder.com/48') }}"
+          alt="{{ profile.name | default('Anonymous') }}"
+          class="note-avatar"
+        />
+        <div class="note-author-info">
+          <div class="note-author-name">
+            {{ profile.display_name or profile.name or (note.pubkey[:8] + '...') }}
+          </div>
+          {% if profile.nip05 %}
+            <div class="note-author-nip05">{{ profile.nip05 }}</div>
+          {% endif %}
+        </div>
+      {% else %}
+        {# Fallback if no profile available #}
+        <div class="note-avatar-placeholder">?</div>
+        <div class="note-author-info">
+          <div class="note-author-name">{{ note.pubkey[:8] }}...</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <time class="note-time" datetime="{{ note.created_at }}">
+      {{ note.created_at | timestamp_to_relative }}
+    </time>
+  </header>
+
+  {# Note content #}
+  <div class="note-content">
+    {{ note.content | nl2br | linkify | safe }}
+  </div>
+
+  {# Enrichment: Reactions #}
+  {% if note._enriched.stats.reactions and note._enriched.stats.reactions.count > 0 %}
+    <div class="note-reactions">
+      <div class="note-reactions-summary">
+        {{ note._enriched.stats.reactions.count }} reaction{{ 's' if note._enriched.stats.reactions.count != 1 }}
+      </div>
+
+      {% if note._enriched.stats.reactions.by_content %}
+        <div class="note-reactions-breakdown">
+          {% for emoji, data in note._enriched.stats.reactions.by_content.items() | sort(attribute='1.count', reverse=True) %}
+            <span
+              class="reaction-tag"
+              title="{{ data.users | join(', ') }}"
+              data-count="{{ data.count }}"
+              data-users="{{ data.users | tojson }}"
+            >
+              {{ emoji }} {{ data.count }}
+            </span>
+          {% endfor %}
+        </div>
+
+        {# Show reactors with profiles if available #}
+        {% if note._enriched.profiles %}
+          <div class="note-reactors">
+            {% for emoji, data in note._enriched.stats.reactions.by_content.items() %}
+              {% for user_pubkey in data.users[:5] %}  {# Show up to 5 reactors per emoji #}
+                {% if note._enriched.profiles[user_pubkey] %}
+                  {% set user_profile = note._enriched.profiles[user_pubkey] %}
+                  <span class="reactor" title="{{ user_profile.name or user_pubkey[:8] }} reacted with {{ emoji }}">
+                    <img
+                      src="{{ user_profile.picture | default('https://via.placeholder.com/24') }}"
+                      alt="{{ user_profile.name | default('User') }}"
+                      class="reactor-avatar"
+                    />
+                  </span>
+                {% endif %}
+              {% endfor %}
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Enrichment: Zaps #}
+  {% if note._enriched.stats.zaps and note._enriched.stats.zaps.count > 0 %}
+    <div class="note-zaps">
+      <div class="note-zaps-summary">
+        <span class="zap-icon">⚡</span>
+        <span class="zap-count">{{ note._enriched.stats.zaps.count }}</span>
+        <span class="zap-amount">{{ note._enriched.stats.zaps.total_sats | format_sats }} sats</span>
+      </div>
+
+      {% if note._enriched.stats.zaps.by_user %}
+        <div class="note-top-zappers">
+          <div class="top-zappers-label">Top zappers:</div>
+          {% for zapper in note._enriched.stats.zaps.by_user | sort(attribute='amount', reverse=True) | slice(5) %}
+            {% set zapper_profile = note._enriched.profiles[zapper.pubkey] if note._enriched.profiles else None %}
+            <div class="zapper" data-pubkey="{{ zapper.pubkey }}">
+              {% if zapper_profile %}
+                <img
+                  src="{{ zapper_profile.picture | default('https://via.placeholder.com/24') }}"
+                  alt="{{ zapper_profile.name | default('User') }}"
+                  class="zapper-avatar"
+                />
+                <span class="zapper-name">{{ zapper_profile.name or (zapper.pubkey[:8] + '...') }}</span>
+              {% else %}
+                <span class="zapper-name">{{ zapper.pubkey[:8] }}...</span>
+              {% endif %}
+              <span class="zapper-amount">{{ zapper.amount | format_sats }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Enrichment: Reposts #}
+  {% if note._enriched.stats.reposts and note._enriched.stats.reposts.count > 0 %}
+    <div class="note-reposts">
+      <div class="note-reposts-summary">
+        <span class="repost-icon">🔁</span>
+        <span class="repost-count">{{ note._enriched.stats.reposts.count }}</span>
+        <span class="repost-label">repost{{ 's' if note._enriched.stats.reposts.count != 1 }}</span>
+      </div>
+
+      {% if note._enriched.stats.reposts.users and note._enriched.profiles %}
+        <div class="note-reposters">
+          {% for user_pubkey in note._enriched.stats.reposts.users[:5] %}
+            {% if note._enriched.profiles[user_pubkey] %}
+              {% set user_profile = note._enriched.profiles[user_pubkey] %}
+              <span class="reposter" title="{{ user_profile.name or user_pubkey[:8] }}">
+                <img
+                  src="{{ user_profile.picture | default('https://via.placeholder.com/24') }}"
+                  alt="{{ user_profile.name | default('User') }}"
+                  class="reposter-avatar"
+                />
+              </span>
+            {% endif %}
+          {% endfor %}
+          {% if note._enriched.stats.reposts.count > 5 %}
+            <span class="reposter-more">+{{ note._enriched.stats.reposts.count - 5 }} more</span>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Note footer with action buttons #}
+  <footer class="note-footer">
+    <button class="note-action note-action-reply" aria-label="Reply">
+      <span class="icon">💬</span>
+      <span class="label">Reply</span>
+    </button>
+
+    <button class="note-action note-action-repost" aria-label="Repost">
+      <span class="icon">🔁</span>
+      <span class="label">{{ note._enriched.stats.reposts.count if note._enriched.stats.reposts else 0 }}</span>
+    </button>
+
+    <button class="note-action note-action-react" aria-label="React">
+      <span class="icon">❤️</span>
+      <span class="label">{{ note._enriched.stats.reactions.count if note._enriched.stats.reactions else 0 }}</span>
+    </button>
+
+    <button class="note-action note-action-zap" aria-label="Zap">
+      <span class="icon">⚡</span>
+      <span class="label">{{ note._enriched.stats.zaps.total_sats | format_sats if note._enriched.stats.zaps else 0 }}</span>
+    </button>
+  </footer>
+</article>

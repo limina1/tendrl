@@ -1,0 +1,8 @@
+❤️ {{ count|default(0) }} reactions
+{% if by_content -%}
+{%- for emoji, emoji_count in by_content.items()|sort(attribute='1', reverse=True) %}
+├─ {{ emoji }} {{ emoji_count }}
+{% endfor -%}
+{%- else %}
+No detailed reaction information available
+{%- endif %}

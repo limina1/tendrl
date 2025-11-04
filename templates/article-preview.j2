@@ -1,0 +1,32 @@
+{# Article preview template for NIP-23 (kind 30023) - used when embedded in other events #}
+{# Get article metadata from tags #}
+{%- set title = '' -%}
+{%- set summary = '' -%}
+{%- set image = '' -%}
+{%- for tag in event.tags -%}
+  {%- if tag[0] == 'title' and tag|length > 1 -%}
+    {%- set title = tag[1] -%}
+  {%- elif tag[0] == 'summary' and tag|length > 1 -%}
+    {%- set summary = tag[1] -%}
+  {%- elif tag[0] == 'image' and tag|length > 1 -%}
+    {%- set image = tag[1] -%}
+  {%- endif -%}
+{%- endfor -%}
+
+<<<ARTICLE_PREVIEW:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+┌─ 📄 Article Preview ───────────────────────────────────
+│
+│ {{ title or 'Untitled Article' }}
+│
+│ {% if deps.author -%}
+by {{ deps.author.display_name or deps.author.name or 'Unknown' }} (@{{ deps.author.name or 'unknown' }})
+│ {%- endif %}
+│
+│ {% if summary -%}
+{{ summary|truncate(150) }}
+│ {%- else -%}
+{{ event.content|truncate(200) }}
+│ {%- endif %}
+│
+└─ <<<REF:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>Read full article<<</REF>>>
+<<</ARTICLE_PREVIEW>>>

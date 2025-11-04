@@ -1,0 +1,60 @@
+{# Tendrl Feed Template
+
+   Renders a complete feed with multiple enriched notes.
+   Adapts Primal's UI design for Tendrl's enrichment system.
+
+   Variables:
+     - notes: List of enriched events from tendrl_query
+     - feed_name: Name of the feed
+     - feed_description: Description text
+#}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ feed_name }} - Tendrl Feed</title>
+  <link rel="stylesheet" href="{% if url_for %}{{ url_for('static', filename='css/feed.css') }}{% else %}static/css/feed.css{% endif %}">
+</head>
+<body>
+  <div class="feed-container">
+    {# Feed header #}
+    <header class="feed-header">
+      <h1 class="feed-title">{{ feed_name }}</h1>
+      {% if feed_description %}
+        <p class="feed-description">{{ feed_description }}</p>
+      {% endif %}
+
+      {# Feed stats #}
+      <div class="feed-stats">
+        <span class="stat">{{ notes | length }} notes</span>
+        <span class="stat">{{ notes | sum(attribute='_enriched.stats.zaps.total_sats') | format_sats }} sats total</span>
+        <span class="stat">{{ notes | sum(attribute='_enriched.stats.reactions.count') }} reactions</span>
+      </div>
+    </header>
+
+    {# Feed content - list of notes #}
+    <main class="feed-content">
+      {% if notes %}
+        {% for note in notes %}
+          {% include 'note.html.j2' %}
+        {% endfor %}
+      {% else %}
+        <div class="feed-empty">
+          <p>No notes in this feed yet.</p>
+        </div>
+      {% endif %}
+    </main>
+
+    {# Load more button #}
+    <footer class="feed-footer">
+      <button class="load-more-btn" data-feed="{{ feed_name }}">
+        Load More
+      </button>
+    </footer>
+  </div>
+
+  <script src="{% if url_for %}{{ url_for('static', filename='js/feed.js') }}{% else %}static/js/feed.js{% endif %}"></script>
+</body>
+</html>

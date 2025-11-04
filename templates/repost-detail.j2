@@ -1,0 +1,11 @@
+🔁 {{ count|default(0) }} reposts
+{% if details -%}
+{%- for repost in details[:10] %}
+├─ {{ repost.reposter_name or "Unknown" }} · {{ repost.created_at|format_relative_time }}
+{% endfor -%}
+{%- if count > 10 %}
+└─ [{{ count - 10 }} more reposts...]
+{%- endif %}
+{%- else %}
+No detailed repost information available
+{%- endif %}

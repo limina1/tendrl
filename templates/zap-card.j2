@@ -1,0 +1,49 @@
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "zap", "sender": (deps.sender.pubkey|to_npub|to_nostr_uri) if deps.sender else "unknown", "recipient": (deps.recipient.pubkey|to_npub|to_nostr_uri) if deps.recipient else "unknown", "target_event": (deps.target_event.id|to_nevent(deps.target_event.pubkey)|to_nostr_uri) if deps.target_event else None, "amount": meta.amount_sats|default(0)}|to_json }}>>>
+────────────────────────────────────────────────────────────────
+⚡ {{ meta.amount_sats|default(0)|format_sats }}
+{% if deps.sender -%}
+{{ deps.sender.display_name or deps.sender.name or "Unknown" }} (@{{ deps.sender.name or "unknown" }})
+{%- if deps.sender.nip05_verified %} ✓{% endif %}
+{%- else -%}
+Unknown Zapper
+{%- endif %}
+ → {% if deps.recipient -%}
+{{ deps.recipient.display_name or deps.recipient.name or "Unknown" }} (@{{ deps.recipient.name or "unknown" }})
+{%- if deps.recipient.nip05_verified %} ✓{% endif %}
+{%- else -%}
+Unknown Recipient
+{%- endif %}
+
+{% if meta.message -%}
+💬 "{{ meta.message|truncate(100) }}"
+
+{% endif -%}
+{% if deps.target_event -%}
+{%- set event_kind = deps.target_event.kind|default(0) -%}
+{%- if event_kind == 1 -%}
+Zapped note by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }}:
+  "{{ deps.target_event.content|truncate(80) }}"
+{%- elif event_kind == 30023 -%}
+Zapped article by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }} 📄
+  {{ deps.target_event.title|default(deps.target_event.content|truncate(80)) }}
+{%- elif event_kind == 30040 -%}
+Zapped channel post by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }} 💬
+  {{ deps.target_event.content|truncate(80) }}
+{%- elif event_kind == 30041 -%}
+Zapped channel by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }} 📢
+{%- elif event_kind == 6 -%}
+Zapped repost by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }} 🔁
+{%- elif event_kind == 7 -%}
+Zapped reaction by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }} ❤️
+{%- else -%}
+Zapped event (kind {{ event_kind }}) by {{ deps.target_event_author.display_name or deps.target_event_author.name or "someone" }}
+  <<<EVENT_REF:{{ deps.target_event.id|to_nevent(deps.target_event.pubkey)|to_nostr_uri }}>>>
+{%- endif %}
+{%- else -%}
+Profile zap 👤
+{%- endif %}
+
+{{ meta.formatted_time }}
+────────────────────────────────────────────────────────────────
+<<</EVENT>>>

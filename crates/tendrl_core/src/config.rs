@@ -6,6 +6,16 @@ use std::path::Path;
 /// Main configuration structure parsed from tendrl.toml
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TendrlConfig {
+    /// User configuration (npub, pubkey, name)
+    #[serde(default)]
+    pub npub: Option<String>,
+
+    #[serde(default)]
+    pub pubkey: Option<String>,
+
+    #[serde(default)]
+    pub name: Option<String>,
+
     #[serde(default)]
     pub feed: HashMap<String, FeedDefinition>,
 }
@@ -31,6 +41,16 @@ impl TendrlConfig {
     pub fn get_feed(&self, id: &str) -> Option<&FeedDefinition> {
         self.feed.get(id)
     }
+
+    /// Get user's pubkey (hex format)
+    pub fn user_pubkey(&self) -> Option<String> {
+        self.pubkey.clone()
+    }
+
+    /// Check if user config is present
+    pub fn has_user_config(&self) -> bool {
+        self.pubkey.is_some() || self.npub.is_some()
+    }
 }
 
 /// Definition of a custom feed
@@ -38,6 +58,10 @@ impl TendrlConfig {
 pub struct FeedDefinition {
     pub name: String,
     pub description: String,
+
+    /// Feed mode: "global" (all users) or "follows" (user's follow list only)
+    #[serde(default = "default_mode")]
+    pub mode: String,
 
     #[serde(default)]
     pub relay_mode: String,  // "custom", "general"
@@ -60,6 +84,10 @@ pub struct FeedDefinition {
 
     #[serde(default)]
     pub root: Option<RootConfig>,
+}
+
+fn default_mode() -> String {
+    "global".to_string()
 }
 
 /// Feed fetching pattern (how to query events)
@@ -102,6 +130,9 @@ pub struct LocalQuery {
 
     #[serde(default)]
     pub note: String,  // Optional description/comment
+
+    #[serde(default)]
+    pub authors: Vec<String>,  // Optional author filter (hex pubkeys)
 }
 
 /// Remote filter specification (for relays)
@@ -117,6 +148,9 @@ pub struct RemoteFilter {
 
     #[serde(default)]
     pub relays: Vec<String>,  // Optional specific relays
+
+    #[serde(default)]
+    pub authors: Vec<String>,  // Optional author filter (hex pubkeys)
 }
 
 /// Root event configuration (UI and dependencies)

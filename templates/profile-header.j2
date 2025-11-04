@@ -1,0 +1,18 @@
+<<<PROFILE:{{ profile.pubkey|to_npub|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "profile_header", "picture": profile.picture, "banner": profile.banner, "name": profile.name, "display_name": profile.display_name, "nip05": profile.nip05, "nip05_verified": profile.nip05_verified, "lightning_address": profile.lightning_address}|to_json }}>>>
+════════════════════════════════════════════════════════════════
+{{ profile.display_name or profile.name or "Unknown User" }}
+{%- if profile.name %} (@{{ profile.name }}){% endif %}
+{%- if profile.nip05_verified %} ✓ {{ profile.nip05 }}{% endif %}
+
+{% if profile.about -%}
+{{ profile.about }}
+{% endif -%}
+
+{% if profile.lightning_address -%}
+⚡ {{ profile.lightning_address }}
+{% endif -%}
+
+📍 {{ profile.pubkey|to_npub }}
+════════════════════════════════════════════════════════════════
+<<</PROFILE>>>

@@ -1,0 +1,546 @@
+# Tendrl Comprehensive Feed Configuration
+# Inspired by flux/nostr-feeds, adapted to Tendrl's config-driven architecture
+#
+# Key Differences from flux:
+# - Tendrl uses notedeck fetching + nostrdb (LMDB) storage
+# - flux uses nak fetching + SQLite storage
+# - Both use Jinja2 templating
+# - Tendrl's hybrid pattern: local queries + remote streaming
+
+npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+pubkey = "dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06"
+name = "liminal"
+db_path = "/home/user/.local/share/tendrl/nostrdb"
+
+# Profile fetcher relays - specialized indexers for kind-0 events
+[profile_fetchers]
+relays = [
+    "wss://purplepag.es",
+    "wss://indexer.coracle.social",
+    "wss://user.kindpag.es",
+    "wss://relay.nostr.band",
+    "wss://relay.damus.io",
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com"
+]
+
+# ============================================================================
+# TIMELINE FEED - Follow-filtered notes and reposts
+# ============================================================================
+
+[feed.timeline]
+name = "Timeline"
+description = "Notes and reposts from your follows"
+display_kinds = [1, 6]  # Notes and reposts
+mode = "follows"  # Filter by follow list
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.timeline.pattern]
+filter_type = "hybrid"
+
+# Backfill: Notes and engagement data
+[[feed.timeline.pattern.local_queries]]
+kinds = [1, 6]
+limit = 100
+note = "Backfill timeline notes and reposts"
+
+[[feed.timeline.pattern.local_queries]]
+kinds = [7, 9735, 0]
+limit = 2000
+note = "Backfill engagement data"
+
+# Stream: Real-time updates
+[[feed.timeline.pattern.remote_filters]]
+kinds = [1, 6, 7, 9735, 0]
+limit = 250
+
+[feed.timeline.root]
+kind = 1
+template = "short-note-card.j2"
+
+[feed.timeline.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.timeline.root.deps.parent_note]
+kind = 1
+relation = "e_tag"
+mode = "single"
+required = false
+
+[feed.timeline.root.deps.parent_author]
+kind = 0
+relation = "parent_author"
+required = false
+
+[feed.timeline.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.timeline.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.timeline.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+[feed.timeline.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.timeline.root.deps.reposted_event]
+relation = "repost_content"
+mode = "expanded"
+max_depth = 3
+required = false
+
+[feed.timeline.root.deps.reposted_author]
+kind = 0
+relation = "reposted_author"
+required = false
+
+# ============================================================================
+# REPLIES FEED - Conversation view
+# ============================================================================
+
+[feed.replies]
+name = "Replies"
+description = "Active conversations (notes with replies)"
+display_kinds = [1]
+mode = "follows"
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.replies.pattern]
+filter_type = "hybrid"
+
+[[feed.replies.pattern.local_queries]]
+kinds = [1]
+limit = 100
+note = "Backfill reply notes"
+
+[[feed.replies.pattern.local_queries]]
+kinds = [7, 9735, 0]
+limit = 1000
+note = "Backfill engagement"
+
+[[feed.replies.pattern.remote_filters]]
+kinds = [1, 7, 9735, 0]
+limit = 200
+
+[feed.replies.root]
+kind = 1
+template = "short-note-card.j2"
+
+[feed.replies.root.filter]
+has_e_tags = true
+
+[feed.replies.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.replies.root.deps.parent_note]
+kind = 1
+relation = "e_tag"
+mode = "single"
+required = false
+
+[feed.replies.root.deps.parent_author]
+kind = 0
+relation = "parent_author"
+required = false
+
+[feed.replies.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.replies.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.replies.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+# ============================================================================
+# GLOBAL FEED - No follow filter
+# ============================================================================
+
+[feed.global]
+name = "Global"
+description = "All notes from relays (no follow filter)"
+display_kinds = [1]
+mode = "global"
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.global.pattern]
+filter_type = "hybrid"
+
+[[feed.global.pattern.local_queries]]
+kinds = [1]
+limit = 100
+note = "Backfill global notes"
+
+[[feed.global.pattern.local_queries]]
+kinds = [0]
+limit = 500
+note = "Backfill profiles"
+
+[[feed.global.pattern.remote_filters]]
+kinds = [1, 0]
+limit = 250
+
+[feed.global.root]
+kind = 1
+template = "short-note-card.j2"
+
+[feed.global.root.filter]
+no_e_tags = true
+
+[feed.global.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# ============================================================================
+# ZAPS FEED - All zap receipts
+# ============================================================================
+
+[feed.zaps]
+name = "Zaps"
+description = "Global zap feed"
+display_kinds = [9735]
+mode = "global"
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.zaps.pattern]
+filter_type = "hybrid"
+
+[[feed.zaps.pattern.local_queries]]
+kinds = [9735]
+limit = 200
+note = "Backfill zap receipts"
+
+[[feed.zaps.pattern.local_queries]]
+kinds = [0, 1]
+limit = 1000
+note = "Backfill profiles and zapped events"
+
+[[feed.zaps.pattern.remote_filters]]
+kinds = [9735, 0, 1]
+limit = 250
+
+[feed.zaps.root]
+kind = 9735
+template = "zap-card.j2"
+
+[feed.zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+[feed.zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+[feed.zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+[feed.zaps.root.deps.target_event_author]
+kind = 0
+relation = "target_author"
+required = false
+
+# ============================================================================
+# MY ZAPS - Personal zaps only
+# ============================================================================
+
+[feed.my_zaps]
+name = "My Zaps"
+description = "Zaps received by me"
+display_kinds = [9735]
+mode = "follows"  # Filter to follows, or could add user-specific filter
+relay_mode = "inbox"
+fetch_strategy = "stream"
+
+[feed.my_zaps.pattern]
+filter_type = "hybrid"
+
+[[feed.my_zaps.pattern.local_queries]]
+kinds = [9735]
+limit = 200
+note = "Backfill my zaps"
+
+[[feed.my_zaps.pattern.local_queries]]
+kinds = [0]
+limit = 500
+note = "Backfill sender profiles"
+
+[[feed.my_zaps.pattern.remote_filters]]
+kinds = [9735, 0]
+limit = 200
+
+[feed.my_zaps.root]
+kind = 9735
+template = "zap-card.j2"
+
+[feed.my_zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+[feed.my_zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+[feed.my_zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+# ============================================================================
+# HIGHLIGHTS FEED - NIP-84 highlights
+# ============================================================================
+
+[feed.highlights]
+name = "Highlights"
+description = "NIP-84 highlights from relays"
+display_kinds = [9802]
+mode = "global"
+relay_mode = "general"
+fetch_strategy = "stream"
+
+[feed.highlights.pattern]
+filter_type = "hybrid"
+
+[[feed.highlights.pattern.local_queries]]
+kinds = [9802]
+limit = 100
+note = "Backfill highlights"
+
+[[feed.highlights.pattern.local_queries]]
+kinds = [0, 1, 30023]
+limit = 500
+note = "Backfill profiles and highlighted content"
+
+[[feed.highlights.pattern.remote_filters]]
+kinds = [9802, 0, 1, 30023]
+limit = 200
+
+[feed.highlights.root]
+kind = 9802
+template = "highlight-card.j2"
+
+[feed.highlights.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.highlights.root.deps.highlighted_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+[feed.highlights.root.deps.highlighted_author]
+kind = 0
+relation = "highlighted_author"
+required = false
+
+[feed.highlights.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.highlights.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.highlights.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+# ============================================================================
+# ARTICLES FEED - Long-form content (kind 30023)
+# ============================================================================
+
+[feed.articles]
+name = "Articles"
+description = "Long-form articles from Nostr"
+display_kinds = [30023]
+mode = "follows"
+relay_mode = "general"
+fetch_strategy = "stream"
+relays = [
+    "wss://relay.nostr.band",
+    "wss://nos.lol",
+    "wss://relay.damus.io"
+]
+
+[feed.articles.pattern]
+filter_type = "hybrid"
+
+[[feed.articles.pattern.local_queries]]
+kinds = [30023]
+limit = 50
+note = "Backfill articles"
+
+[[feed.articles.pattern.local_queries]]
+kinds = [0, 7, 9735]
+limit = 500
+note = "Backfill profiles and engagement"
+
+[[feed.articles.pattern.remote_filters]]
+kinds = [30023, 0, 7, 9735]
+limit = 100
+
+[feed.articles.root]
+kind = 30023
+template = "article-preview.j2"
+
+[feed.articles.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.articles.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.articles.root.deps.replies]
+kind = 1
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.articles.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+# ============================================================================
+# PUBLICATIONS FEED - NIP-XX knowledge base publications
+# ============================================================================
+
+[feed.publications]
+name = "Publications"
+description = "Nostr Knowledge Base publications (kind 30040)"
+display_kinds = [30040]
+mode = "global"
+relay_mode = "general"
+fetch_strategy = "manual"
+relays = [
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com",
+    "wss://medschlr.nostr1.com"
+]
+
+[feed.publications.pattern]
+filter_type = "hybrid"
+
+[[feed.publications.pattern.local_queries]]
+kinds = [30040]
+limit = 50
+note = "Backfill publications"
+
+[[feed.publications.pattern.local_queries]]
+kinds = [30041, 30818, 30023, 0]
+limit = 200
+note = "Backfill sections, wiki pages, articles, profiles"
+
+[[feed.publications.pattern.remote_filters]]
+kinds = [30040, 30041, 30818, 30023, 0]
+limit = 50
+
+[feed.publications.root]
+kind = 30040
+template = "publication-card.j2"
+
+[feed.publications.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.publications.root.deps.sub_publications]
+kind = 30040
+relation = "a_tag"
+mode = "tree"
+max_depth = 5
+required = false
+
+[feed.publications.root.deps.sections]
+kind = 30041
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+[feed.publications.root.deps.wiki_pages]
+kind = 30818
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+[feed.publications.root.deps.articles]
+kind = 30023
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+[feed.publications.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.publications.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+[feed.publications.root.deps.replies]
+kind = 1
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true

@@ -4,8 +4,10 @@ pub mod error;
 pub mod feed;
 pub mod filter;
 pub mod filter_state;
+pub mod follows;
 pub mod note_cache;
 pub mod timeline;
+pub mod unknown_ids;
 
 pub use config::*;
 pub use enrichment::*;
@@ -13,7 +15,7 @@ pub use error::*;
 pub use feed::*;
 pub use filter::*;
 pub use filter_state::*;
+pub use follows::*;
 pub use note_cache::*;
 pub use timeline::*;
-
-// UnknownIds is re-exported from timeline module (which gets it from notedeck)
+pub use unknown_ids::*;

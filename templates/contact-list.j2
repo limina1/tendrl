@@ -1,0 +1,37 @@
+{# Contact list template for kind 3 events (follow lists) #}
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "contact_list", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "contact_count": meta.contact_count|default(0), "depth": meta.depth|default(0)}|to_json }}>>>
+════════════════════════════════════════════════════════════════
+👥 Contact List
+════════════════════════════════════════════════════════════════
+
+{% if deps.author -%}
+Following list of {{ deps.author.display_name or deps.author.name or 'Unknown' }} (<<<PROFILE:{{ deps.author.pubkey|to_npub|to_nostr_uri }}>>>@{{ deps.author.name or 'unknown' }}<<</PROFILE>>>)
+{%- else -%}
+Following list
+{%- endif %}
+📅 {{ event.created_at|format_relative_time }}
+
+{% if deps.contacts -%}
+────────────────────────────────────────────────────────────────
+Following {{ meta.contact_count }} people:
+
+{% for contact in deps.contacts -%}
+{%- set profile = contact.profile -%}
+┌─ <<<PROFILE:{{ contact.pubkey|to_npub|to_nostr_uri }}>>>{{ profile.display_name or profile.name or 'Unknown' }}<<</PROFILE>>>{% if contact.petname %} ({{ contact.petname }}){% endif %}
+
+│  @{{ profile.name or 'unknown' }}
+{% if profile.about -%}
+│  {{ profile.about|truncate(100) }}
+{%- endif %}
+{% if contact.relay -%}
+│  📡 {{ contact.relay }}
+{%- endif %}
+
+{% endfor -%}
+{%- else -%}
+────────────────────────────────────────────────────────────────
+No contacts found in this list.
+{%- endif %}
+════════════════════════════════════════════════════════════════
+<<</EVENT>>>

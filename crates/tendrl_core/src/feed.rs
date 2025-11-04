@@ -15,10 +15,31 @@ fn build_local_packages(queries: &[LocalQuery]) -> Vec<NdbQueryPackage> {
     queries
         .iter()
         .map(|query| {
-            let filters = vec![Filter::new()
+            let mut filter_builder = Filter::new()
                 .kinds(query.kinds.clone())
-                .limit(query.limit)
-                .build()];
+                .limit(query.limit);
+
+            // Add authors filter if provided
+            if !query.authors.is_empty() {
+                // Convert hex strings to byte arrays
+                let author_refs: Vec<[u8; 32]> = query.authors
+                    .iter()
+                    .filter_map(|hex_str| {
+                        let bytes = hex::decode(hex_str).ok()?;
+                        if bytes.len() != 32 {
+                            return None;
+                        }
+                        let mut array = [0u8; 32];
+                        array.copy_from_slice(&bytes);
+                        Some(array)
+                    })
+                    .collect();
+
+                let author_refs_slice: Vec<&[u8; 32]> = author_refs.iter().collect();
+                filter_builder = filter_builder.authors(author_refs_slice);
+            }
+
+            let filters = vec![filter_builder.build()];
 
             NdbQueryPackage {
                 filters,
@@ -33,10 +54,31 @@ fn build_remote_filters(filters: &[RemoteFilter]) -> Vec<Filter> {
     filters
         .iter()
         .map(|filter_spec| {
-            Filter::new()
+            let mut filter_builder = Filter::new()
                 .kinds(filter_spec.kinds.clone())
-                .limit(filter_spec.limit)
-                .build()
+                .limit(filter_spec.limit);
+
+            // Add authors filter if provided
+            if !filter_spec.authors.is_empty() {
+                // Convert hex strings to byte arrays
+                let author_refs: Vec<[u8; 32]> = filter_spec.authors
+                    .iter()
+                    .filter_map(|hex_str| {
+                        let bytes = hex::decode(hex_str).ok()?;
+                        if bytes.len() != 32 {
+                            return None;
+                        }
+                        let mut array = [0u8; 32];
+                        array.copy_from_slice(&bytes);
+                        Some(array)
+                    })
+                    .collect();
+
+                let author_refs_slice: Vec<&[u8; 32]> = author_refs.iter().collect();
+                filter_builder = filter_builder.authors(author_refs_slice);
+            }
+
+            filter_builder.build()
         })
         .collect()
 }
@@ -63,11 +105,13 @@ mod tests {
                 kinds: vec![1],
                 limit: 100,
                 note: "".to_string(),
+                authors: vec![],
             },
             LocalQuery {
                 kinds: vec![6],
                 limit: 50,
                 note: "".to_string(),
+                authors: vec![],
             },
         ];
 
@@ -85,6 +129,7 @@ mod tests {
                 limit: 250,
                 note: "".to_string(),
                 relays: vec![],
+                authors: vec![],
             },
         ];
 
@@ -101,12 +146,14 @@ mod tests {
                 kinds: vec![1],
                 limit: 500,
                 note: "".to_string(),
+                authors: vec![],
             }],
             remote_filters: vec![RemoteFilter {
                 kinds: vec![1, 0],
                 limit: 250,
                 note: "".to_string(),
                 relays: vec![],
+                authors: vec![],
             }],
             enrichment: "client_computed".to_string(),
             relationship_building: "".to_string(),

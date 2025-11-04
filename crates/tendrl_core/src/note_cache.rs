@@ -1,6 +1,44 @@
 use nostrdb::{Note, NoteKey, NoteReply, NoteReplyBuf};
 use std::collections::HashMap;
 
+/// Reference to a note in nostrdb
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NoteRef {
+    pub key: NoteKey,
+    pub created_at: u64,
+}
+
+impl NoteRef {
+    pub fn new(key: NoteKey, created_at: u64) -> Self {
+        NoteRef { key, created_at }
+    }
+
+    pub fn key(&self) -> NoteKey {
+        self.key
+    }
+
+    pub fn created_at(&self) -> u64 {
+        self.created_at
+    }
+}
+
+impl PartialOrd for NoteRef {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for NoteRef {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Sort by created_at descending (newest first)
+        match self.created_at.cmp(&other.created_at) {
+            std::cmp::Ordering::Equal => self.key.cmp(&other.key),
+            std::cmp::Ordering::Less => std::cmp::Ordering::Greater,
+            std::cmp::Ordering::Greater => std::cmp::Ordering::Less,
+        }
+    }
+}
+
 /// Helper function to extract a tag value from a note by tag name
 ///
 /// Searches through a note's tags to find the first tag with the given name

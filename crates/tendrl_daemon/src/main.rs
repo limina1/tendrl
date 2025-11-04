@@ -28,15 +28,15 @@
 //! - Poll local subscriptions to update timeline views
 
 use enostr::{RelayEvent, RelayMessage, RelayPool};
-use notedeck::tendrl_config::TendrlConfig;
-use notedeck::{tendrl_feed, NoteCache};
 use nostrdb::{Config, Ndb, Transaction};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use tendrl_core::{Timeline, TimelineKind, TimelineTab};
-// UnknownIds is re-exported from notedeck via tendrl_core
-use notedeck::UnknownIds;
+use tendrl_core::{
+    Timeline, TimelineKind, TimelineTab, TendrlConfig,
+    load_follow_list, build_hybrid_filter, NoteCache,
+    UnknownIds, FilterState, HybridFilter,
+};
 use tracing::{debug, error, info, warn};
 
 /// Main daemon entry point - initializes components and runs the event loop
@@ -75,6 +75,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("nostrdb opened at: {}", db_path);
 
+    // Load user's follow list if user pubkey is configured
+    let follow_list = if let Some(user_pubkey) = tendrl_config.user_pubkey() {
+        info!("Loading follow list for user: {}...", &user_pubkey[..8]);
+        match load_follow_list(&ndb, &user_pubkey) {
+            Ok(follows) => {
+                info!("✓ Loaded {} follows", follows.len());
+                Some(follows)
+            }
+            Err(e) => {
+                warn!("Failed to load follow list: {}. Feeds with mode='follows' will use empty author list.", e);
+                None
+            }
+        }
+    } else {
+        info!("No user pubkey configured - follow-filtered feeds will be disabled");
+        None
+    };
+
     // Create RelayPool and add default relays
     info!("Creating relay pool...");
     let mut pool = RelayPool::new();
@@ -105,13 +123,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for (feed_id, feed_def) in &tendrl_config.feed {
             info!(
-                "Setting up feed '{}': {}",
-                feed_id, feed_def.name
+                "Setting up feed '{}' (mode: {}): {}",
+                feed_id, feed_def.mode, feed_def.name
             );
 
-            // Build HybridFilter from feed pattern defined in TOML
+            // Clone feed pattern and inject authors if mode = "follows"
+            let mut pattern = feed_def.pattern.clone();
+
+            if feed_def.mode == "follows" {
+                if let Some(ref follows) = follow_list {
+                    info!("Injecting {} authors into feed '{}'", follows.len(), feed_id);
+
+                    // Inject authors into all local queries
+                    for query in &mut pattern.local_queries {
+                        if query.authors.is_empty() {
+                            query.authors = follows.clone();
+                        }
+                    }
+
+                    // Inject authors into all remote filters
+                    for filter in &mut pattern.remote_filters {
+                        if filter.authors.is_empty() {
+                            filter.authors = follows.clone();
+                        }
+                    }
+                } else {
+                    warn!("Feed '{}' has mode='follows' but no follow list available - using empty author filter", feed_id);
+                }
+            }
+
+            // Build HybridFilter from the (possibly modified) pattern
             // This converts LocalQuery and RemoteFilter specs into nostr Filter objects
-            let filter = tendrl_feed::build_hybrid_filter(&feed_def.pattern);
+            let filter = build_hybrid_filter(&pattern);
 
             // Create a Generic timeline for this custom feed
             // Using a simple hash of the feed_id as the timeline identifier
@@ -121,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Create timeline with the hybrid filter
             let mut timeline = Timeline::new(
                 timeline_kind,
-                notedeck::FilterState::ready_hybrid(filter.clone()),
+                FilterState::ready_hybrid(filter.clone()),
                 TimelineTab::full_tabs(),
             );
 
@@ -283,7 +326,7 @@ fn setup_timeline_local_subscription(
     timeline: &mut Timeline,
     note_cache: &mut NoteCache,
     unknown_ids: &mut UnknownIds,
-    filter: &notedeck::filter::HybridFilter,
+    filter: &HybridFilter,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Only subscribe locally if the timeline supports it
     if !timeline.kind.should_subscribe_locally() {

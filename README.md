@@ -1,410 +1,284 @@
-# Tendrl - Nostr Feed Fetcher
+# T̴̢͠E̸͝N̷̛D̸R̴L̵͠
+## A Reckless Parasitic Amorphous Configuration Pattern that Drills into Any Nostr client and Injects Custom Feed Capabilities.
 
-A minimal, headless Nostr event fetcher built on Notedeck's battle-tested relay patterns and nostrdb's lightning-fast LMDB storage.
+> **This is functional satire** its what happens when you combine creative writing, bio horror with software documentation
+> **Don't annoy devs** if you use tendrl, don't assume it is good enough to be merged. This is intended for local and personal use only.
+> *Like a tendril wrapping around a host, Tendrl drills into any Nostr client and injects custom feed capabilities - recklessly, adaptively, and without asking permission.* 🌿
 
-## Overview
-
-Tendrl is a **headless daemon** for fetching and querying Nostr events. It combines:
-
-- **Notedeck's proven RelayPool** - The same reliable event fetching logic used in production
-- **nostrdb's LMDB storage** - Sub-millisecond queries via memory-mapped databases
-- **Program-agnostic output** - JSONL format pipes to any enricher/renderer you choose
-
-Unlike full Nostr clients, Tendrl has **no UI complexity**. It's a Unix-style tool: fetch events, store them efficiently, query them fast, output JSON. What you do with that data is up to you.
-
-## Architecture
-
-Tendrl consists of three components:
-
-### 1. `tendrl_daemon` - The Event Fetcher
-
-A background daemon that:
-- Reads `tendrl.toml` configuration defining custom feeds
-- Connects to Nostr relays using Notedeck's RelayPool
-- Fetches events according to filter specifications
-- Stores everything in nostrdb (LMDB database)
-- Runs continuously, keeping your local database updated
-
-**Data flow**: Relays → RelayPool → nostrdb → disk
-
-### 2. `nostrdb_json_query` - The Query Tool
-
-A CLI tool for extracting events from nostrdb:
-- Queries the LMDB database directly (no network I/O)
-- Supports filtering by kind, author, time range, limit
-- Outputs newline-delimited JSON (JSONL)
-- Completes queries in ~1ms (nostrdb is **fast**)
-
-**Data flow**: nostrdb → filter → JSONL stdout
-
-### 3. External Enricher (Your Choice)
-
-Any program that reads JSONL and does something useful:
-- Python scripts (like [nostr-feeds](https://github.com/limina1/nostr-feeds))
-- Jinja2 templates rendering HTML
-- Data analysis tools
-- Custom UI applications
-- Shell scripts piping to other tools
-
-**Data flow**: JSONL stdin → process → output
-
-## Why Tendrl?
-
-**Speed**: nostrdb uses LMDB (memory-mapped files). Queries complete in microseconds. No SQL parsing overhead.
-
-**Reliability**: Notedeck's RelayPool has been battle-tested in production. It handles reconnections, subscriptions, and event validation correctly.
-
-**Simplicity**: No web server. No GUI framework. No JavaScript bundle. Just daemons and JSONL pipes.
-
-**Flexibility**: Your enricher can be **anything**. Python for ML analysis. Jinja2 for static sites. Rust for speed. JavaScript for browsers. Tendrl doesn't care - it just provides the data.
-
-**Composability**: Unix philosophy. Small tools that do one thing well and pipe together.
-
-## Quick Start
-
-### 1. Build the Binaries
-
-```bash
-cd /home/user/Documents/Programming/tendrl/tendrl
-cargo build --release
-```
-
-This produces:
-- `target/release/tendrl_daemon`
-- `target/release/tendrl_query`
-
-### 2. Create Configuration
-
-Copy the example config:
-
-```bash
-cp examples/tendrl.toml.example tendrl.toml
-```
-
-Edit `tendrl.toml` to define your feeds (see [docs/TENDRL_TOML.md](docs/TENDRL_TOML.md) for details).
-
-### 3. Start the Daemon
-
-```bash
-./target/release/tendrl_daemon --config tendrl.toml
-```
-
-The daemon will:
-- Connect to configured relays
-- Begin fetching events matching your filters
-- Store them in `~/.local/share/tendrl/nostrdb/` (or custom path)
-- Continue running until stopped (Ctrl+C)
-
-### 4. Query Events
-
-```bash
-# Get latest 50 zap receipts (kind 9735)
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb --kinds 9735 --limit 50
-
-# Get highlights from last 24 hours
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb \
-  --kinds 9802 \
-  --since $(date -d '24 hours ago' +%s) \
-  --limit 100
-
-# Get all long-form articles by specific author
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb \
-  --kinds 30023 \
-  --author npub1abc... \
-  --limit 500
-```
-
-Output is JSONL (one JSON object per line):
-
-```json
-{"id":"abc123...","pubkey":"def456...","created_at":1234567890,"kind":9735,"tags":[...],"content":"...","sig":"..."}
-{"id":"xyz789...","pubkey":"ghi012...","created_at":1234567891,"kind":9735,"tags":[...],"content":"...","sig":"..."}
-```
-
-### 5. Pipe to Enricher
-
-```bash
-# Analyze with jq
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb \
-  --kinds 9735 --limit 100 | \
-  jq -r '.pubkey' | sort | uniq -c | sort -rn
-
-# Render HTML with Python
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb \
-  --kinds 9802 --limit 50 | \
-  python render_highlights.py > highlights.html
-
-# Feed to nostr-feeds enricher
-./target/release/tendrl_query --db ~/.local/share/tendrl/nostrdb \
-  --kinds 30023 --limit 100 | \
-  python -m nostr_feeds.enricher --template article_feed.html
-```
-
-## Components Deep Dive
-
-### tendrl_daemon
-
-**Purpose**: Continuously fetch Nostr events and store them locally.
-
-**Key Features**:
-- Uses Notedeck's `RelayPool` for connection management
-- Handles reconnections and subscription management automatically
-- Stores events in nostrdb (LMDB) for fast queries
-- Configurable via `tendrl.toml`
-
-**Command-line Options**:
-```
---config <PATH>     Path to tendrl.toml (default: ./tendrl.toml)
---db <PATH>         Path to nostrdb directory (default: ~/.local/share/tendrl/nostrdb)
---log-level <LEVEL> Logging verbosity: error, warn, info, debug, trace
-```
-
-**Example**:
-```bash
-tendrl_daemon --config ~/.config/tendrl.toml --db ~/nostrdb --log-level debug
-```
-
-### tendrl_query
-
-**Purpose**: Query nostrdb and output JSONL.
-
-**Key Features**:
-- Direct LMDB queries (no daemon needed)
-- Multiple filter options (kind, author, time, limit)
-- Fast: typically completes in <10ms for 1000s of events
-- Outputs valid JSONL (one event per line)
-
-**Command-line Options**:
-```
---db <PATH>         Path to nostrdb directory (required)
---kinds <KINDS>     Comma-separated event kinds (e.g., "1,6,7")
---author <NPUB>     Filter by author npub/hex pubkey
---since <UNIX>      Minimum created_at timestamp
---until <UNIX>      Maximum created_at timestamp
---limit <NUM>       Maximum number of events (default: 100)
-```
-
-**Example**:
-```bash
-# All zaps from last week
-tendrl_query --db ~/nostrdb \
-  --kinds 9735 \
-  --since $(date -d '7 days ago' +%s) \
-  --limit 1000
-```
-
-## Integration Examples
-
-### With jq (JSON Analysis)
-
-```bash
-# Top 10 most-zapped events
-tendrl_query --db ~/nostrdb --kinds 9735 --limit 1000 | \
-  jq -r '.tags[] | select(.[0] == "e") | .[1]' | \
-  sort | uniq -c | sort -rn | head -10
-
-# Extract all highlight content
-tendrl_query --db ~/nostrdb --kinds 9802 --limit 100 | \
-  jq -r '.content'
-```
-
-### With Python Enricher
-
-```python
-#!/usr/bin/env python3
-import sys
-import json
-
-for line in sys.stdin:
-    event = json.loads(line)
-
-    # Enrich event (fetch profiles, compute stats, etc.)
-    enriched = enrich_event(event)
-
-    # Render to HTML
-    print(render_template(enriched))
-```
-
-Usage:
-```bash
-tendrl_query --db ~/nostrdb --kinds 9802 --limit 50 | ./enricher.py > output.html
-```
-
-### With nostr-feeds
-
-[nostr-feeds](https://github.com/limina1/nostr-feeds) is a Python-based enricher with Jinja2 templates:
-
-```bash
-tendrl_query --db ~/nostrdb --kinds 30023 --limit 100 | \
-  nostr-feeds render --template publications.j2 > feed.html
-```
-
-## Configuration
-
-Tendrl is configured via `tendrl.toml`. This file defines:
-
-- **Relays**: Which Nostr relays to connect to
-- **Feeds**: What event kinds to fetch and how to filter them
-- **Patterns**: Fetching strategies (polling, streaming, hybrid)
-- **Dependencies**: Related events to fetch (profiles, replies, zaps)
-
-See [docs/TENDRL_TOML.md](docs/TENDRL_TOML.md) for complete documentation.
-
-**Example feed definition**:
-
-```toml
-[feed.highlights]
-name = "Highlights"
-display_kinds = [9802]
-
-[feed.highlights.pattern]
-filter_type = "hybrid"
-
-local_queries = [
-    { kinds = [9802], limit = 500 },
-    { kinds = [0], limit = 500 },  # Profiles
-]
-
-remote_filters = [
-    { kinds = [9802, 0], limit = 250 }
-]
-```
-
-## Data Storage
-
-Tendrl uses **nostrdb** for storage:
-
-- **Format**: LMDB (memory-mapped database)
-- **Default location**: `~/.local/share/tendrl/nostrdb/`
-- **Size**: Grows automatically (typical: 1-5 GB for 100K events)
-- **Performance**: Sub-millisecond queries via mmap
-
-**Database structure**:
-```
-nostrdb/
-├── data.mdb       # Main database file
-├── lock.mdb       # LMDB lock file
-└── nostrdb.db     # Metadata
-```
-
-**Backup**: Simply copy the entire `nostrdb/` directory.
-
-## Troubleshooting
-
-### Daemon won't start
-
-**Problem**: `tendrl_daemon` exits immediately or fails to connect.
-
-**Solutions**:
-- Check `tendrl.toml` syntax: `toml-cli check tendrl.toml`
-- Verify relay URLs are valid WebSocket endpoints
-- Check firewall isn't blocking outbound WebSocket connections
-- Run with `--log-level debug` to see connection details
-
-### No events being fetched
-
-**Problem**: Daemon runs but `tendrl_query` returns nothing.
-
-**Solutions**:
-- Verify relays support the event kinds you're requesting
-- Check filters aren't too restrictive (try removing limits temporarily)
-- Some relays rate-limit; try adding more relays to `tendrl.toml`
-- Inspect logs: `tendrl_daemon --log-level info` shows subscription status
-
-### Query returns wrong events
-
-**Problem**: `tendrl_query` outputs events you didn't expect.
-
-**Solutions**:
-- Remember nostrdb stores **all** events the daemon fetched
-- Use `--kinds`, `--author`, `--since`, `--until` to filter
-- Check other feeds in `tendrl.toml` might be fetching those kinds
-- nostrdb is shared across all feeds (by design)
-
-### Database corruption
-
-**Problem**: LMDB errors or crashes.
-
-**Solutions**:
-- Stop `tendrl_daemon` cleanly (Ctrl+C, not kill -9)
-- LMDB is very resilient; corruption is rare
-- If corrupted: delete `nostrdb/` directory and re-sync (daemon will rebuild)
-- Keep backups if data is important
-
-## Performance
-
-**Benchmarks** (on typical laptop, 100K events in nostrdb):
-
-| Operation | Time |
-|-----------|------|
-| Query 1000 zaps | ~2ms |
-| Query with author filter | ~5ms |
-| Full table scan (100K events) | ~50ms |
-| Insert new event | ~0.1ms |
-
-**Memory usage**:
-- `tendrl_daemon`: ~50 MB (RelayPool + buffers)
-- `tendrl_query`: ~10 MB (opens database read-only)
-- nostrdb mmap: 0 MB (kernel handles pages)
-
-**Disk I/O**:
-- nostrdb is memory-mapped; kernel caches hot pages
-- Cold queries hit disk; hot queries from RAM
-- Database size: ~10 KB per event (varies by content)
-
-## Comparison to Alternatives
-
-| Tool | Approach | Speed | Flexibility |
-|------|----------|-------|-------------|
-| **Tendrl** | Daemon + nostrdb + JSONL | ⚡ Fast (LMDB) | 🔥 Very flexible (any enricher) |
-| **nak** | CLI + SQLite | ⚙️ Moderate | ✅ Good (pipes to scripts) |
-| **Nostr client** | Full app + UI | 🐌 Slower (UI overhead) | ❌ Locked to app's UI |
-| **Custom relay** | Server + database | ⚡ Fast (dedicated) | 🔧 Requires server maintenance |
-
-**When to use Tendrl**:
-- You want Notedeck's reliability without the GUI
-- You're building custom frontends/analysis tools
-- You need fast local queries (LMDB advantage)
-- You prefer Unix pipes over monolithic apps
-
-**When NOT to use Tendrl**:
-- You want a ready-to-use client (use Damus, Amethyst, etc.)
-- You only need web-based access (use web clients)
-- You don't want to run a daemon (use on-demand tools like nak)
-
-## License
-
-MIT OR Apache-2.0
-
-You may use Tendrl under either:
-- [MIT License](https://opensource.org/licenses/MIT)
-- [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
-
-Choose whichever suits your project.
-
-## Contributing
-
-Tendrl is part of the broader [Tendrl ecosystem](https://github.com/limina1/tendrl) - a "parasitic configuration pattern" for injecting custom feeds into Nostr clients.
-
-This headless daemon is one instantiation of that pattern: instead of injecting into an existing client, we built a minimal fetcher from scratch.
-
-**Contributing**:
-- Report bugs via GitHub issues
-- Submit PRs for fixes or enhancements
-- Share your enricher scripts/templates
-- Document interesting feed configurations
-
-## Links
-
-- **Main Tendrl Project**: https://github.com/limina1/tendrl
-- **nostrdb**: https://github.com/damus-io/nostrdb-rs
-- **Notedeck**: https://github.com/damus-io/notedeck
-- **nostr-feeds** (enricher): https://github.com/limina1/nostr-feeds
 
 ---
 
-**Built with**: Rust, nostrdb, enostr, Notedeck patterns
-**Philosophy**: Unix tools, composability, speed, simplicity
-**Status**: Experimental - use at your own risk
+## What is Tendrl?
 
-*The feeds grow. The data flows. The pattern adapts.* 🌿
+**Tendrl is not software.**
+
+It's a configuration file. A prompt template. Pure text that convinces an AI to write code that shouldn't exist.
+
+Just `tendrl.toml`, a set of possible prompts
+## Requirements
+
+An AI with terminal access and coding capabilities
+
+
+
+---
+
+
+## The Problem 🍄
+
+Your favorite client doesn't show the feeds you want, or maybe it does but you don't like the ui. Maybe one client is super fast, and you want to mix it in with another that looks nice. What if you want to weave various capabilities of different capabilities into a chimera app 🤔⚗️
+
+Every path leads to suffering:
+
+1. **Fork the client** → maintain divergent codebase until heat death (exhaustion)
+2. **Submit PR** → wait months for review, probable rejection (dissolution)  
+3. **Build new client** → reinvent fifteen thousand lines of networking code (madness)
+4. **Give up** → accept limitation forever (death)
+
+There is a fifth option.
+
+***̷̡P̶̀͜A̷͝R̸̛A̵̕͜S̶̾I̵͋T̴̚I̸̊S̶̄M̵͝***
+
+---
+
+## The Solution
+
+You write one file: `tendrl.toml`
+
+### A highlight feed
+``` toml
+[feed.highlights]
+name = "Highlights"
+description = "Annotated excerpts - text that migrates between contexts"
+
+relay_mode = "general"              # Use user's default relays
+fetch_strategy = "stream"           # Real-time streaming
+filter_by_follows = false           # Show all highlights
+
+display_kinds = [9802]
+
+[feed.highlights.root]
+kind = 9802                         # Highlight events
+template = "highlight-card"
+
+# Author of the highlight
+[feed.highlights.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# The event being highlighted (can be any kind)
+[feed.highlights.root.deps.highlighted_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true               # Don't restrict by kind
+
+# Author of highlighted content
+[feed.highlights.root.deps.highlighted_author]
+kind = 0
+relation = "highlighted_author"     # Custom relation
+required = false
+
+# Content authors (from p-tags with 'author' role)
+[feed.highlights.root.deps.content_authors]
+kind = 0
+relation = "content_authors"
+required = false
+multiple = true                     # Can have multiple
+
+# Stats on the highlight itself
+[feed.highlights.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.highlights.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+[feed.highlights.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+```
+
+You point an AI (Claude, GPT-4, whatever) at the target client's repository. You feed it the Tendrl system prompt. You wait.
+
+The AI performs reconnaissance. It reads thousands of lines of code, learning:
+- How the client fetches Nostr events from relays 🧠
+- How it stores data in local databases
+- How it renders UI components
+- How it manages application state and routing
+- How it handles user interactions and navigation
+
+Then it generates injection code. Components that match the host's framework. Data fetching that uses the host's networking patterns. Database schemas that extend the existing structure. UI that renders in the host's exact style.
+
+The code it writes **looks like the original developers wrote it.**
+
+You copy the generated files into the client. The feeds appear. The client accepts them as its own.
+
+---
+
+## Philosophy 👁️
+
+### Parasitic
+Tendrl doesn't replace hosts. It i̶n̷f̶i̸l̸t̵r̶a̷t̸e̸s̴ them. The host client continues living, functioning normally, while Tendrl's modifications spread through the codebase. Users experience the new feeds as if they were always meant to be there.
+
+### Amorphous  
+Tendrl has no fixed form. It adapts to React, Vue, Svelte, Swift, Kotlin, whatever architecture it encounters. Each infection generates unique code. Each integration learns new patterns. 🌱
+
+### Reckless
+Tendrl doesn't wait for permission. You define what feeds you want. The AI finds injection points and generates the necessary code. No "official support" required. No API contracts. No stable interfaces.
+
+### Config-Driven
+You maintain only `tendrl.toml`. Everything else - components, data fetching, state management, UI integration - the AI generates by studying the host. When the host updates, you regenerate. The pattern adapts.
+
+### AI-Powered
+A sufficiently capable LLM analyzes the target codebase, reverse-engineers its patterns, and writes implementation code that mimics the host's style. You're not learning each client's architecture. The AI does. You're not writing adapter code. The AI does. 🦷
+
+You just define what you want to grow.
+
+---
+
+## How It Works
+
+### Phase 1: R̸͝e̴c̵o̷n̴n̸a̷i̵s̸s̴a̸n̷c̴e̸ 🫀
+
+Feed the AI your target client's repository. Use the Tendrl system prompt (included in this repo). The AI will:
+
+```
+ANALYZING: component/FeedManager.tsx...
+PATTERN DETECTED: Redux state management
+NETWORKING: RTK Query with custom relay selector
+RENDERING: Virtualized list with infinite scroll
+STORAGE: IndexedDB via Dexie.js wrapper
+INJECTION POINT IDENTIFIED: src/features/feeds/index.ts
+```
+
+It produces a profile of the host - a comprehensive map of how the client works. This isn't documentation. This is anatomical study. 🫁
+
+### Phase 2: Adaptation 🧬
+
+You provide your `tendrl.toml` configuration. The AI uses the host profile to generate implementation code:
+
+- Components that perfectly match the host's framework and style
+- Data fetching logic using the host's networking patterns  
+- Database migrations that extend existing schemas
+- State management code that integrates with the host's architecture
+- Routing updates that feel intentional, not grafted on
+
+The generated code doesn't look like foreign tissue. It looks **native**.
+
+### Phase 3: Integration 🌿
+
+You copy the generated files into the host client's codebase. You run the host's own build process. The new feeds appear in the interface, rendering with the host's own components, fetched through the host's own relay connections, stored in the host's own database.
+
+The client never knew it was being modified. The feeds look like they were always planned.
+
+---
+
+## Feed Types
+
+Once integrated, any feed type can be injected:
+
+**Blogs** (NIP-23) - Long-form articles and blog posts  
+**Highlights** (NIP-84) - Saved text selections and annotations  
+**Zaps** (NIP-57) - Lightning payment activity streams 🦠  
+**DVM Jobs** (NIP-90) - Data vending machine marketplace  
+**Wiki Articles** (NIP-54) - Collaborative knowledge repositories  
+
+Or anything else you define. The pattern is **amorphous**. It grows into whatever shape you need.
+
+---
+
+## Target Hosts
+
+Successful modifications on
+- **Flux** 
+- **Gossip** 
+
+---
+
+
+## Nothing to Install 🦠
+
+**There is only the pattern.**
+
+1. Copy `tendrl.toml` (the configuration)
+2. Copy `tendrl-system-prompt.md` (the AI instructions) 
+3. Feed both to an AI with access to the target client's code
+4. Receive generated injection code
+5. Integrate into host
+6. The feeds g̶r̷o̸w̵
+
+---
+
+## Known Limitations 🫀
+
+Some architectures resist injection:
+
+- **Heavily obfuscated code** - The AI needs readable patterns to learn from
+- **Extreme type safety** - Languages like Rust with complex borrow checking
+- **Closed-source clients** - Can't inject what you can't read
+- **Clients without relay abstraction** - Direct relay coupling makes injection difficult
+- **Hostile build systems** - Some tools actively prevent code modification
+
+When injection fails, document the failure. The pattern learns from resistance.
+
+---
+
+## Warnings ⚠️
+
+**Tendrl operates without permission.** You are modifying software that was not designed to be modified. The original developers did not consent to this integration. The host client's architecture may be damaged by improper injection.
+
+**Generated code may contain vulnerabilities.** AI-written code can include security flaws, memory leaks, or incorrect error handling. Review all generated code before integration.
+
+**The pattern spreads unpredictably.** Once you understand how to inject one feed, you'll want to inject more. Then inject them into more clients. Then teach others to inject. This is **intentional**. 🧬
+
+**Updates may break everything.** When the host client updates, your injections may stop working. This is the cost of parasitism - you depend on the host's stability.
+
+
+Use at your own risk. This is experimental software development through AI-mediated code generation.
+
+We accept no responsibility for what grows.
+Your prompts define the direction, its iterative.
+
+---
+## Serious Documentation
+
+**→ [docs/TECHNICAL_README.md](docs/TECHNICAL_README.md)** - Actual architecture, build instructions, component specs.
+
+---
+
+## Source inspiration
+Before I realized I could apply this to anything, I used
+`nak` (fetching)+`sqlite` (databased)+`jinja2` (universal templating)
+[nostr-feeds/flux](https://github.com/limina1/nostr-feeds)
+## Barely Functional POCs
+[flux publications](https://i.nostr.build/SIEj7OvHNyPuoC45.png)
+[gossip zaps](https://i.nostr.build/xX867fY1BSIs2Oyd.png)
+[gossip highlights](https://i.nostr.build/3StODL5isO2en3Z8.png)
+[gossip publications](https://i.nostr.build/3OsI9erBnjIRLHqY.png)
+
+## License
+
+MIT - Because Tendrl should wrap around everything.
+Fork it. Modify it. Let it m̴̀u̷͌t̶̚a̶̐t̷̊e̸̽.
+Cite it, don't cite it. Tendrl always knows its roots 𖣂
+
+---
+
+---
+
+*Built without permission* 🦷
+*Literally no one asked for this*
+
+**The pattern spreads. The pattern adapts. The pattern g̵r̶o̷w̸s̵.** 🌿🦠🧬
+
+---
+

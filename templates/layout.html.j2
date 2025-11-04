@@ -1,0 +1,104 @@
+{# Tendrl Layout - Primal-style vertical sidebar navigation #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ feed_name }}{% endblock %} - Tendrl</title>
+  <link rel="stylesheet" href="{% if url_for %}{{ url_for('static', filename='css/primal.css') }}{% else %}./static/css/primal.css{% endif %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="app-container">
+    {# Left Sidebar - Vertical Navigation (Primal-style) #}
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="/" class="logo-link">
+          <div class="logo">Tendrl</div>
+        </a>
+      </div>
+
+      <nav class="side-nav">
+        {% set nav_items = [
+          {'to': '/', 'label': 'Home', 'icon': 'home'},
+          {'to': '/reads', 'label': 'Reads', 'icon': 'reads'},
+          {'to': '/explore', 'label': 'Explore', 'icon': 'explore'},
+          {'to': '/messages', 'label': 'Messages', 'icon': 'messages'},
+          {'to': '/bookmarks', 'label': 'Bookmarks', 'icon': 'bookmarks'},
+          {'to': '/notifications', 'label': 'Notifications', 'icon': 'notifications'},
+          {'to': '/downloads', 'label': 'Downloads', 'icon': 'downloads'},
+          {'to': '/settings', 'label': 'Settings', 'icon': 'settings'},
+        ] %}
+
+        {% for item in nav_items %}
+          <a href="{{ item.to }}" class="nav-link {% if current_page == item.to %}active{% endif %}">
+            <div class="nav-icon nav-icon-{{ item.icon }}"></div>
+            <div class="nav-label">{{ item.label }}</div>
+          </a>
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn-primary btn-post">
+          <div class="post-icon"></div>
+          <span>New Note</span>
+        </button>
+      </div>
+    </aside>
+
+    {# Main Content Area #}
+    <main class="main-content">
+      {# Header with feed title #}
+      <header class="content-header">
+        <h1 class="feed-title">{% block header_title %}{{ feed_name | default('Feed') }}{% endblock %}</h1>
+        {% if feed_description %}
+          <p class="feed-description">{{ feed_description }}</p>
+        {% endif %}
+      </header>
+
+      {# Main feed content #}
+      <div class="feed-wrapper">
+        {% block content %}
+          {# Default content - can be overridden #}
+        {% endblock %}
+      </div>
+    </main>
+
+    {# Right Sidebar (optional - for explore/trending) #}
+    {% if show_right_sidebar %}
+    <aside class="sidebar-right">
+      {% block right_sidebar %}
+        <div class="trending-section">
+          <h3>Trending</h3>
+          {# Trending content #}
+        </div>
+      {% endblock %}
+    </aside>
+    {% endif %}
+  </div>
+
+  {# Mobile Bottom Navigation #}
+  <nav class="mobile-nav">
+    <a href="/" class="mobile-nav-item {% if current_page == '/' %}active{% endif %}">
+      <div class="nav-icon nav-icon-home"></div>
+    </a>
+    <a href="/explore" class="mobile-nav-item {% if current_page == '/explore' %}active{% endif %}">
+      <div class="nav-icon nav-icon-explore"></div>
+    </a>
+    <a href="/messages" class="mobile-nav-item {% if current_page == '/messages' %}active{% endif %}">
+      <div class="nav-icon nav-icon-messages"></div>
+    </a>
+    <a href="/notifications" class="mobile-nav-item {% if current_page == '/notifications' %}active{% endif %}">
+      <div class="nav-icon nav-icon-notifications"></div>
+    </a>
+  </nav>
+
+  {# Floating Action Button (mobile) #}
+  <button class="fab-btn">
+    <div class="post-icon"></div>
+  </button>
+
+  <script src="{% if url_for %}{{ url_for('static', filename='js/feed.js') }}{% else %}./static/js/feed.js{% endif %}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

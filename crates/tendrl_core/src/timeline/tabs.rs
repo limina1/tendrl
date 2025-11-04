@@ -1,5 +1,5 @@
 use super::{MergeKind, NotePayload, TimelineUnits, UnknownPks};
-use notedeck::CachedNote;
+use crate::CachedNote;
 use nostrdb::{Ndb, Note, Transaction};
 use tracing::debug;
 

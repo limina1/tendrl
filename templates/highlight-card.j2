@@ -1,0 +1,80 @@
+{# Highlight card template for NIP-84 (kind 9802) events #}
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "highlight", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "depth": meta.depth|default(0), "is_quote": deps.is_quote_highlight|default(false), "reference_type": ("nostr" if (deps.highlighted_event or deps.referenced_address) else ("url" if deps.highlighted_url else "unknown"))}|to_json }}>>>
+────────────────────────────────────────────────────────────────
+{% if deps.author %}{{ deps.author.display_name or deps.author.name or 'Unknown' }} (@{{ deps.author.name }}){% else %}Unknown{% endif %} highlighted {{ meta.formatted_time|default('recently') }}
+
+{% if deps.is_quote_highlight %}💬 Quote Highlight{% endif %}
+
+"{{ deps.highlighted_text }}"
+
+{% if deps.context %}
+Context: {{ deps.context|truncate(200) }}
+{% endif %}
+
+{% if deps.highlighted_event %}
+{# Check kind of highlighted event for specialized rendering #}
+{%- set highlighted_kind = deps.highlighted_event.kind|default(1) -%}
+{%- if highlighted_kind == 30023 -%}
+{# Article (kind 30023) - show title and summary #}
+{%- set article_title = '' -%}
+{%- set article_summary = '' -%}
+{%- for tag in deps.highlighted_event.tags -%}
+  {%- if tag[0] == 'title' and tag|length > 1 -%}
+    {%- set article_title = tag[1] -%}
+  {%- elif tag[0] == 'summary' and tag|length > 1 -%}
+    {%- set article_summary = tag[1] -%}
+  {%- endif -%}
+{%- endfor -%}
+─── From Article (kind 30023) ───
+📄 {{ article_title or 'Untitled Article' }}
+{% if deps.highlighted_author %}by {{ deps.highlighted_author.display_name or deps.highlighted_author.name or 'Unknown' }} (@{{ deps.highlighted_author.name }}){% endif %}
+
+{% if article_summary %}{{ article_summary|truncate(150) }}{% else %}{{ deps.highlighted_event.content|truncate(150) }}{% endif %}
+<<<REF:{{ deps.highlighted_event.id|to_nevent(deps.highlighted_event.pubkey)|to_nostr_uri }}>>>Read full article<<</REF>>>
+{%- elif highlighted_kind == 30818 -%}
+{# Wiki article #}
+{%- set wiki_title = '' -%}
+{%- for tag in deps.highlighted_event.tags -%}
+  {%- if tag[0] == 'title' and tag|length > 1 -%}
+    {%- set wiki_title = tag[1] -%}
+  {%- endif -%}
+{%- endfor -%}
+─── From Wiki Article (kind 30818) ───
+📚 {{ wiki_title or 'Wiki Page' }}
+{% if deps.highlighted_author %}by {{ deps.highlighted_author.display_name or deps.highlighted_author.name or 'Unknown' }}{% endif %}
+
+{{ deps.highlighted_event.content|truncate(150) }}
+<<<REF:{{ deps.highlighted_event.id|to_nevent(deps.highlighted_event.pubkey)|to_nostr_uri }}>>>View wiki page<<</REF>>>
+{%- else -%}
+{# Generic event - show content #}
+─── From Nostr Event (kind {{ highlighted_kind }}) ───
+{% if deps.highlighted_author %}{{ deps.highlighted_author.display_name or deps.highlighted_author.name or 'Unknown' }} (@{{ deps.highlighted_author.name }}){% endif %}
+{{ deps.highlighted_event.content|truncate(150) }}
+<<<REF:{{ deps.highlighted_event.id|to_nevent(deps.highlighted_event.pubkey)|to_nostr_uri }}>>>View full event<<</REF>>>
+{%- endif -%}
+
+{% elif deps.referenced_address %}
+─── From Nostr Event (kind {{ deps.referenced_address.kind }}) ───
+{% if deps.content_authors %}{% for author in deps.content_authors %}{{ author.display_name or author.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+{% else %}(Event not in database)
+{% endif %}📍 Address: {{ deps.referenced_address.address }}
+
+{% elif deps.highlighted_url %}
+─── From Web ───
+🔗 {{ deps.highlighted_url }}
+
+{% endif %}
+{% if deps.content_authors %}
+✍️ Original author{{ 's' if deps.content_authors|length > 1 else '' }}: {% for author in deps.content_authors %}{{ author.display_name or author.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+
+{% endif %}
+{% if deps.comment %}
+💭 Comment: {{ deps.comment }}
+
+{% endif %}
+{% if deps.reactions or deps.replies or deps.zaps %}
+{% if deps.reactions %}<<<STAT:reactions:{{ deps.reactions.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>❤️ {{ deps.reactions.count }}<<</STAT>>>  {% endif %}{% if deps.replies %}<<<STAT:replies:{{ deps.replies.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>💬 {{ deps.replies.count }}<<</STAT>>>  {% endif %}{% if deps.zaps %}<<<STAT:zaps:{{ deps.zaps.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>⚡ {{ deps.zaps.total_sats|format_sats }}<<</STAT>>>{% endif %}
+{% endif %}
+────────────────────────────────────────────────────────────────
+<<</EVENT>>>

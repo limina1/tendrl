@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use enostr::Pubkey;
 use nostrdb::{Ndb, Note, NoteKey, Transaction};
-use notedeck::NoteRef;
+use crate::NoteRef;
 
-// Use UnknownIds from notedeck (primus)
-pub use notedeck::UnknownIds;
+// Use UnknownIds from tendrl_core
+pub use crate::UnknownIds;
 
 use super::note_types::{
     CompositeFragment, CompositeKey, NoteUnit, NoteUnitFragment, Reaction,
@@ -216,13 +216,47 @@ impl<'a> From<RepostResponse<'a>> for NoteUnitFragmentResponse<'a> {
     }
 }
 
+/// Helper to get reposted note from a kind-6 repost event
+fn get_reposted_note<'a>(
+    ndb: &Ndb,
+    txn: &'a Transaction,
+    note: &Note,
+) -> Option<Note<'a>> {
+    // Check for "e" tag which points to the reposted note
+    for tag in note.tags() {
+        if tag.count() >= 2 {
+            if let Some("e") = tag.get_str(0) {
+                if let Some(ndb_str) = tag.get(1) {
+                    // Try to get the note ID
+                    if let Some(id) = ndb_str.id() {
+                        // Direct ID bytes
+                        if let Ok(note) = ndb.get_note_by_id(txn, id) {
+                            return Some(note);
+                        }
+                    } else if let Some(hex_str) = ndb_str.str() {
+                        // Try to decode hex string to bytes
+                        if let Ok(bytes) = hex::decode(hex_str) {
+                            if bytes.len() == 32 {
+                                let mut arr = [0u8; 32];
+                                arr.copy_from_slice(&bytes);
+                                if let Ok(note) = ndb.get_note_by_id(txn, &arr) {
+                                    return Some(note);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn to_repost<'a>(
     payload: &'a NotePayload,
     ndb: &Ndb,
     txn: &Transaction,
 ) -> Option<RepostResponse<'a>> {
-    use notedeck_ui::note::get_reposted_note;
-
     let reposted_note = match get_reposted_note(ndb, txn, &payload.note) {
         Some(r) => r,
         None => {

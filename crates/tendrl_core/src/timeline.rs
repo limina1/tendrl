@@ -10,13 +10,10 @@ pub use tabs::*;
 pub use units::*;
 pub use note_types::*;
 
-use notedeck::{FilterState, FilterStates, NoteCache};
+use crate::{FilterState, FilterStates, NoteCache, UnknownIds};
 use nostrdb::{Ndb, NoteKey, Transaction};
 
 use crate::Result;
-
-// Re-export UnknownIds from notedeck for consistent usage
-pub use notedeck::UnknownIds;
 
 /// A timeline manages notes for a specific feed, handling both local (nostrdb)
 /// and remote (relay) subscriptions.

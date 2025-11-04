@@ -1,0 +1,548 @@
+[global]
+db_dir = "~/.local/share/nostr-feeds"
+template_dir = "templates"
+profile_cache_db = "profiles.db"
+
+# Cache TTL settings (in seconds)
+profile_cache_ttl = 0  # Never expire profiles (profiles don't change often, just refetch manually when needed)
+event_refresh_interval = 300  # Refresh event stats (reactions/replies/zaps) after 5 minutes
+
+# Default user for follow-based feeds
+default_npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+
+# Known users (for quick switching)
+known_npubs = []
+
+# User-specific configuration
+[users."npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"]
+name = "liminal"
+relays = ["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol", "wss://theforest.nostr1.com"]
+
+# ==================================================================
+# REFRESH SYSTEM NOTES:
+# ==================================================================
+# The enricher auto-derives which event kinds to fetch from your
+# dependency tree. You don't need to specify kinds explicitly!
+#
+# For example, if you configure:
+#   root.kind = 1 (notes)
+#   deps.reactions.kind = 7
+#   deps.zaps.kind = 9735
+#   deps.reposts.kind = 6
+#
+# The system will automatically fetch [1, 7, 6, 9735] in a single
+# `nak req` command when refreshing.
+#
+# AUTOMATIC PROFILE FETCHING:
+# After fetching events, the system automatically:
+# 1. Extracts all unique pubkeys (authors + mentioned users)
+# 2. Checks which profiles are missing from profiles.db
+# 3. Fetches missing profiles in batches (kind 0, 25 at a time)
+# 4. Stores to shared profiles.db
+#
+# This means you don't need to manually populate profiles!
+#
+# REFRESH STRATEGIES:
+# - refresh_interval > 0:  Polling (fetch every N seconds)
+# - refresh_interval = 0:  Manual only (on-demand)
+#
+# CLI COMMANDS:
+# - Check status:    python -m enricher.main --local --feed timeline --feed-status
+# - Manual refresh:  python -m enricher.main --local --feed timeline --fetch
+# - Auto-refresh:    python -m enricher.main --local --feed timeline --auto-refresh --render
+# - Load more:       python -m enricher.main --local --feed timeline --load-more 50 --render
+# - Start scheduler: python -m enricher.feed_scheduler enricher/config.toml
+# ==================================================================
+
+# Timeline feed (filtered by follows)
+[feed.timeline]
+name = "timeline"
+type = "follows"
+fetch_strategy = "stream"      # Enable real-time streaming
+relay_mode = "general"           # Can be "general", "outbox", "inbox", etc.
+db_file = "timeline.db"
+refresh_interval = 30            # Fetch every 30 seconds (polling)
+filter_by_follows = true         # Only show posts from followed users (works with any relay_mode)
+# relays = ["wss://relay.damus.io", "wss://relay.nostr.band"]  # Optional: Per-feed relays (falls back to user relays)
+
+# Stream multiple kinds to populate stats in real-time
+stream_kinds = [1, 6, 7, 9735]  # notes, reposts, reactions, zaps
+
+# Display both notes and reposts as root events
+display_kinds = [1, 6]  # Show both notes and reposts as cards
+
+[feed.timeline.root]
+kind = 1  # Primary kind for enrichment (used for dependency config)
+# template = "short-note-card.j2"  # Commented out to enable auto-selection for display_kinds = [1, 6]
+
+# Note: Removed no_e_tags filter to show replies in timeline
+# [feed.timeline.root.filter]
+# no_e_tags = true  # Only top-level posts
+
+[feed.timeline.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# Get parent note for replies (shows context)
+[feed.timeline.root.deps.parent_note]
+kind = 1
+relation = "e_tag"
+mode = "single"
+required = false
+
+# Get the parent note's author profile
+[feed.timeline.root.deps.parent_author]
+kind = 0
+relation = "parent_author"
+required = false
+
+[feed.timeline.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.timeline.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.timeline.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+[feed.timeline.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+# For kind 6 reposts: extract the reposted event from content JSON and enrich it
+[feed.timeline.root.deps.reposted_event]
+relation = "repost_content"  # Special relation: parses JSON from content field
+mode = "expanded"  # Recursively enrich the reposted event with its dependencies
+max_depth = 3  # Limit recursion depth to avoid infinite loops
+required = false
+
+# For kind 6 reposts: get the original author's profile
+[feed.timeline.root.deps.reposted_author]
+kind = 0
+relation = "reposted_author"  # Gets author of the reposted event
+required = true
+
+# For kind 1 notes: extract quoted events from nostr:nevent1... mentions
+[feed.timeline.root.deps.quoted_event]
+relation = "quoted_event"  # Special relation: extracts nevent from content
+mode = "single"  # First quoted event only
+required = false
+
+# Author of quoted event
+[feed.timeline.root.deps.quoted_author]
+kind = 0
+relation = "quoted_author"  # Gets author of the quoted event
+required = false
+
+# Mentioned profiles (nprofile URIs in content)
+[feed.timeline.root.deps.mentioned_profiles]
+relation = "mentioned_profiles"  # Extracts nprofile mentions from content
+required = false
+
+# Replies feed (only show replies - active conversations)
+[feed.replies]
+name = "replies"
+type = "relay"
+db_file = "timeline.db"  # Reuse timeline database
+refresh_interval = 30
+filter_by_follows = false  # Show all replies (or true for follows only)
+display_kinds = [1]
+
+[feed.replies.root]
+kind = 1
+template = "short-note-card.j2"
+
+# Only show notes that ARE replies (have e-tags)
+[feed.replies.root.filter]
+has_e_tags = true
+
+[feed.replies.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# Get the parent note being replied to
+[feed.replies.root.deps.parent_note]
+kind = 1
+relation = "e_tag"
+mode = "single"  # Get first parent note
+required = false
+
+# Get the parent note's author profile
+[feed.replies.root.deps.parent_author]
+kind = 0
+relation = "parent_author"  # Custom relation: gets author of parent_note
+required = false
+
+[feed.replies.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.replies.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.replies.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+[feed.replies.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+# Mentioned profiles (nprofile URIs in content)
+[feed.replies.root.deps.mentioned_profiles]
+relation = "mentioned_profiles"  # Extracts nprofile mentions from content
+required = false
+
+# All feed (no follow filter, uses timeline.db)
+[feed.all]
+name = "all"
+type = "relay"
+db_file = "timeline.db"
+refresh_interval = 30
+filter_by_follows = false  # Show all posts
+
+[feed.all.root]
+kind = 1
+template = "short-note-card.j2"
+
+[feed.all.root.filter]
+no_e_tags = true
+
+[feed.all.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.all.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.all.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.all.root.deps.zaps]
+kind = 9735
+relation = "p_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+[feed.all.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+# Global feed (no follow filter)
+[feed.global]
+name = "global"
+type = "relay"
+db_file = "global.db"
+refresh_interval = 30
+filter_by_follows = false  # Show all posts
+
+[feed.global.root]
+kind = 1
+template = "short-note-card.j2"
+
+[feed.global.root.filter]
+no_e_tags = true
+
+[feed.global.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+
+# Zap Feed Configuration Example
+# Place this in your main config.toml
+
+# Global zap feed (all zaps from configured relays)
+[feed.zaps]
+name = "zaps"
+fetch_strategy = "stream"        # Real-time streaming
+relay_mode = "general"           # Use configured relays
+db_file = "zaps.db"
+filter_by_follows = false        # Show all zaps (or true for follows only)
+
+[feed.zaps.root]
+kind = 9735                      # Zap receipts (NOT 9734!)
+template = "zap-card.j2"
+
+# Sender profile (from zap request inside description tag)
+[feed.zaps.root.deps.sender]
+kind = 0
+relation = "sender"              # Custom relation (enricher extracts from description)
+required = true
+
+# Recipient profile (from p tag / event author)
+[feed.zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+# Optional: Event being zapped (if e tag present)
+# Note: No 'kind' specified - fetch any event type (notes, articles, channels, etc.)
+[feed.zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true            # Enricher fetches event regardless of kind
+
+# Optional: Author of zapped event
+[feed.zaps.root.deps.target_event_author]
+kind = 0
+relation = "target_author"
+required = false
+
+# ============================================================================
+# Personal zaps only (inbox mode)
+# ============================================================================
+
+[feed.my_zaps]
+name = "my_zaps"
+fetch_strategy = "stream"
+relay_mode = "inbox"             # Your inbox relays (NIP-65)
+db_file = "my_zaps.db"
+
+[feed.my_zaps.root]
+kind = 9735
+template = "zap-card.j2"
+
+[feed.my_zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+[feed.my_zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+[feed.my_zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+[feed.my_zaps.root.deps.target_event_author]
+kind = 0
+relation = "target_author"
+required = false
+
+# ============================================================================
+# Follows zaps (outbox mode)
+# ============================================================================
+
+[feed.follows_zaps]
+name = "follows_zaps"
+fetch_strategy = "stream"
+relay_mode = "outbox"            # Follows' write relays
+db_file = "follows_zaps.db"
+filter_by_follows = true         # Only zaps from followed users
+
+[feed.follows_zaps.root]
+kind = 9735
+template = "zap-card.j2"
+
+[feed.follows_zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+[feed.follows_zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+[feed.follows_zaps.root.deps.target_event]
+relation = "e_tag"
+required = false
+fetch_any_kind = true
+
+[feed.follows_zaps.root.deps.target_event_author]
+kind = 0
+relation = "target_author"
+required = false
+
+# ============================================================================
+# Highlights Feed (NIP-84)
+# ============================================================================
+
+[feed.highlights]
+name = "highlights"
+fetch_strategy = "stream"
+relay_mode = "general"
+db_file = "highlights.db"
+filter_by_follows = false  # Show all highlights (or true for follows only)
+
+[feed.highlights.root]
+kind = 9802  # Highlight events
+template = "highlight-card.j2"
+
+# Author of the highlight
+[feed.highlights.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# The nostr event being highlighted (from e or a tags)
+[feed.highlights.root.deps.highlighted_event]
+relation = "e_tag"  # Can also be a_tag for addressable events
+required = false
+fetch_any_kind = true  # Highlights can reference any event kind
+
+# Author of the highlighted content
+[feed.highlights.root.deps.highlighted_author]
+kind = 0
+relation = "highlighted_author"  # Custom relation
+required = false
+
+# Content authors (from p tags with 'author' role)
+[feed.highlights.root.deps.content_authors]
+kind = 0
+relation = "content_authors"  # Custom relation for p-tag authors
+required = false
+multiple = true  # Can have multiple authors
+
+# Stats on the highlight itself
+[feed.highlights.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.highlights.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+[feed.highlights.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+expandable = true
+
+# ============================================================================
+# Publications Feed (NIP-XX Publications)
+# Kind 30040 = publications (containers, can nest)
+# Kind 30041 = sections (content)
+# Kind 30818 = wiki pages (content)
+# Kind 30023 = long-form articles (content)
+# ============================================================================
+
+[feed.publications]
+name = "publications"
+fetch_strategy = "manual"
+relay_mode = "general"
+db_file = "publications.db"
+filter_by_follows = false
+display_kinds = [30040]
+refetch_engagement = true  # Always fetch fresh engagement metrics from relays
+relays = [
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com",
+    "wss://medschlr.nostr1.com"
+]
+
+[feed.publications.root]
+kind = 30040
+template = "publication-card.j2"
+
+# Author profile
+[feed.publications.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+# Sub-publications (branching)
+# Publications reference parent publications via 'a' tag
+[feed.publications.root.deps.sub_publications]
+kind = 30040
+relation = "a_tag"
+mode = "tree"
+max_depth = 5
+required = false
+
+# Content: Sections (listed IN publication's a-tags per NKBIP-01)
+[feed.publications.root.deps.sections]
+kind = 30041
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+# Content: Wiki pages (listed IN publication's a-tags)
+[feed.publications.root.deps.wiki_pages]
+kind = 30818
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+# Content: Articles (listed IN publication's a-tags)
+[feed.publications.root.deps.articles]
+kind = 30023
+relation = "a_tag_children"
+mode = "expanded"
+required = false
+
+# Engagement metrics (use a_tag for addressable!)
+[feed.publications.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.publications.root.deps.reposts]
+kind = 6
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+
+[feed.publications.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+[feed.publications.root.deps.replies]
+kind = 1
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true

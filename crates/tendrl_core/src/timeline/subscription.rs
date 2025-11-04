@@ -1,6 +1,6 @@
 use enostr::RelayPool;
-use notedeck::filter::HybridFilter;
-use notedeck::UnifiedSubscription;
+use crate::filter::HybridFilter;
+use crate::UnifiedSubscription;
 use nostrdb::{Ndb, Subscription};
 use tracing::debug;
 use uuid::Uuid;

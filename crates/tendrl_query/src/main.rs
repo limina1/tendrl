@@ -128,8 +128,19 @@ fn note_to_event(note: &Note) -> NostrEvent {
         .tags()
         .iter()
         .map(|tag| {
-            tag.into_iter()
-                .filter_map(|item| item.str().map(|s| s.to_string()))
+            (0..tag.count())
+                .filter_map(|i| {
+                    tag.get(i).map(|ndb_str| {
+                        // NdbStr can be either a string or an ID (32-byte array)
+                        if let Some(s) = ndb_str.str() {
+                            s.to_string()
+                        } else if let Some(id) = ndb_str.id() {
+                            hex::encode(id)
+                        } else {
+                            String::new()
+                        }
+                    })
+                })
                 .collect()
         })
         .collect();

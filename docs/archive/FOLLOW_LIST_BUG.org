@@ -1,0 +1,233 @@
+#+TITLE: Follow List Configuration - Status & Bug Report
+#+DATE: 2025-10-31
+#+AUTHOR: Claude Code
+#+PRIORITY: A
+
+* Goal
+Configure Tendrl with user's Nostr identity and fetch their follow list (kind-3 contact list) to enable follow-filtered feeds.
+
+* User Identity
+- *npub*: ~npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf~
+- *pubkey (hex)*: ~dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06~
+- *profile name*: "liminal 🦠"
+- *total follows*: 533 accounts
+
+* What We Did
+
+** DONE Updated User Config
+CLOSED: [2025-10-31]
+
+Updated ~tendrl.toml~ at project root with user's npub and pubkey:
+
+#+begin_src toml
+[user]
+npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+pubkey = "dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06"
+name = "liminal"
+#+end_src
+
+** DONE Fetched Contact List from Relays
+CLOSED: [2025-10-31]
+
+Successfully fetched kind-3 event from ~wss://relay.damus.io~ using nak:
+
+#+begin_src bash
+nak req -k 3 -a dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06 \
+  --limit 1 wss://relay.damus.io
+#+end_src
+
+Event structure (correct):
+#+begin_src json
+{
+  "kind": 3,
+  "tags": [
+    ["p", "01ddee289b1a2e90874ca3428a7a414764a6cad1abfaa985c201e7aada16d38c"],
+    ["p", "bd1e19980e2c91e6dc657e92c25762ca882eb9272d2579e221f037f93788de91"],
+    // ...533 total p-tags
+  ]
+}
+#+end_src
+
+** DONE Imported into Nostrdb
+CLOSED: [2025-10-31]
+
+Successfully imported using ~tendrl_ingest~:
+
+#+begin_src bash
+nak req -k 3 -a dc4cd086... wss://relay.damus.io | \
+  ./tendrl/target/release/tendrl_ingest
+# Output: ✓ Stored event
+#+end_src
+
+* CRITICAL BUG: Tag Values Stripped :BUG:BLOCKER:
+
+When querying the event back from nostrdb, *all tag values are missing*:
+
+#+begin_src bash
+# Query from nostrdb
+./tendrl/target/release/tendrl_query \
+  --config tendrl/tendrl_enrichment_test.toml \
+  --kinds 3 --author dc4cd086... | jq '.tags[:3]'
+#+end_src
+
+*ACTUAL OUTPUT (WRONG)*:
+#+begin_src json
+[
+  ["p"],
+  ["p"],
+  ["p"]
+]
+#+end_src
+
+*EXPECTED OUTPUT*:
+#+begin_src json
+[
+  ["p", "01ddee289b1a2e90874ca3428a7a414764a6cad1abfaa985c201e7aada16d38c"],
+  ["p", "bd1e19980e2c91e6dc657e92c25762ca882eb9272d2579e221f037f93788de91"],
+  ["p", "17538dc2a62769d09443f18c37cbe358fab5bbf981173542aa7c5ff171ed77c4"]
+]
+#+end_src
+
+** Bug Confirmation
+- [X] Event count is correct: ~jq '.tags | map(select(.[0] == "p")) | length'~ returns ~533~
+- [ ] Tag values are stripped: Each tag is just ~["p"]~ instead of ~["p", "pubkey"]~
+- [X] Tested with both ~tendrl_query~ and ~primus/target/release/nostrdb_json_query~ - same issue
+- [X] Original event from nak has proper structure
+
+** Impact
+- Cannot use ~tendrl_follows.py~ to filter feeds by follow list
+- Follow list shows only 2 "follows" which are malformed relay URLs
+- Any feed with ~filter_by_follows = true~ won't work correctly
+
+* Architecture Context
+
+** Tendrl System Components
+1. *Config*: ~tendrl.toml~ (TOML-driven feed definitions)
+2. *Storage*: nostrdb (LMDB database at ~~/.local/share/tendrl/nostrdb/~)
+3. *Ingestion*: ~tendrl_ingest~ (stores events from stdin)
+4. *Querying*: ~tendrl_query~ (queries nostrdb, outputs JSONL)
+5. *Rendering*: ~tendrl_render.py~ (Jinja2 templates)
+
+** Existing Tools
+- ~tendrl_follows.py~ - Python script to fetch/filter by follows (blocked by bug)
+- ~tendrl_render.py~ - Jinja2 renderer for feeds
+- ~primus/~ - Modified Notedeck that reads ~tendrl.toml~ at runtime
+
+** Modular Pattern (from nostr-feeds)
+The original ~nostr-feeds/~ directory demonstrates the modular pattern:
+- *Fetching*: nak
+- *Storage*: sqlite
+- *Rendering*: jinja2
+
+Tendrl evolved this to use nostrdb/notedeck as the fetching engine.
+
+* Possible Root Causes
+
+**UPDATE**: After analyzing nostr-feeds architecture (see ~ARCHITECTURE_COMPARISON.org~), the root cause is narrowed down:
+
+1. *Bug in ~tendrl_query~*: Query serialization drops tag values (MOST LIKELY)
+   - Tag *count* is preserved (533 tags detected)
+   - Tag *values* are stripped (only ~["p"]~ returned, not ~["p", "pubkey"]~)
+   - Suggests bug in JSON serialization layer, not storage
+
+2. *Bug in nostrdb FFI binding*: Rust↔nostrdb tag array conversion
+   - Tags stored correctly (ingest doesn't error)
+   - Tags retrieved incorrectly (query strips values)
+   - FFI boundary may lose array elements
+
+3. *Bug in ~tendrl_ingest~*: Event import strips tag values during storage (UNLIKELY)
+   - Would affect tag count too
+
+4. *nostrdb limitation*: Database schema doesn't preserve all tag values? (UNLIKELY)
+   - ~primus/notedeck~ successfully uses nostrdb
+
+* TODO Next Steps
+
+** TODO Immediate Workaround
+1. Fetch follows directly from relays using nak (bypassing nostrdb):
+   #+begin_src bash
+   nak req -k 3 -a dc4cd086... wss://relay.damus.io | \
+     jq -r '.tags[] | select(.[0] == "p") | .[1]' > my_follows.txt
+   #+end_src
+
+2. Modify ~tendrl_follows.py~ to read from ~my_follows.txt~ instead of querying nostrdb
+
+3. Use nak for follow-filtered queries:
+   #+begin_src bash
+   # Get follows
+   FOLLOWS=$(cat my_follows.txt | paste -sd,)
+
+   # Query notes from follows
+   nak req -k 1 --authors "$FOLLOWS" --limit 50 wss://relay.damus.io
+   #+end_src
+
+** TODO Permanent Fix Required
+1. *Debug the tag storage/retrieval bug*:
+   - [ ] Add debug logging to ~tendrl_ingest~ to see what's stored
+   - [ ] Add debug logging to ~tendrl_query~ to see what's retrieved
+   - [ ] Check nostrdb documentation for tag handling
+   - [ ] Look at how ~primus/notedeck~ handles tags
+
+2. *Test tag preservation*:
+   - [ ] Create minimal test event with tags
+   - [ ] Ingest and query back
+   - [ ] Verify all tag values preserved
+
+3. *Compare with working implementation*:
+   - [ ] Check how ~primus/notedeck~ queries tags
+   - [ ] See if there's a different query API that preserves values
+
+* Files to Check
+- ~tendrl/crates/*/src/*.rs~ - Rust implementation
+- ~tendrl/tendrl_follows.py:54-94~ - Follow list fetching logic
+- ~tendrl/examples/~ - Any example code for tag handling
+- ~primus/~ - Working Notedeck implementation
+
+* Database Locations
+- *Tendrl nostrdb*: ~~/.local/share/tendrl/nostrdb/data.mdb~ (50MB)
+- *Primus/Notedeck*: ~~/.local/share/notedeck/db/~
+
+* Commands Reference
+
+** Query with tendrl_query
+#+begin_src bash
+./tendrl/target/release/tendrl_query \
+  --config tendrl/tendrl_enrichment_test.toml \
+  --kinds 3 --author dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06
+#+end_src
+
+** Query with primus nostrdb_json_query
+#+begin_src bash
+./primus/target/release/nostrdb_json_query \
+  --db ~/.local/share/tendrl/nostrdb \
+  --kinds 3 --author dc4cd086... --limit 1
+#+end_src
+
+** Fetch from relay using nak
+#+begin_src bash
+nak req -k 3 -a dc4cd086cd7ce5b1832adf4fdd1211289880d2c7e295bcb0e684c01acee77c06 \
+  --limit 1 wss://relay.damus.io wss://relay.nostr.band
+#+end_src
+
+** Ingest event
+#+begin_src bash
+cat event.json | ./tendrl/target/release/tendrl_ingest
+#+end_src
+
+* Status Summary
+- [X] User config set
+- [X] Contact list fetched from relays (533 follows)
+- [X] Event stored in nostrdb
+- [ ] *BLOCKED*: Tag values stripped during storage or retrieval
+- [ ] Cannot filter feeds by follows until bug is fixed
+
+* Notes
+The bug blocks core follow-filtering functionality. The event is stored (50MB nostrdb) but tag values are lost when queried back. This appears to be a fundamental issue with the tendrl_ingest/tendrl_query pipeline or nostrdb FFI bindings.
+
+* Architecture Context
+
+See ~ARCHITECTURE_COMPARISON.org~ for detailed analysis of how this differs from the working ~nostr-feeds~ implementation.
+
+**Key Difference**: nostr-feeds stores tags as JSON strings (~json.dumps()~) in SQLite TEXT column, then deserializes (~json.loads()~) on retrieval. This explicit serialization works reliably.
+
+Tendrl uses nostrdb's native LMDB storage, which should be faster but has a bug in the query/serialization layer that strips tag values.

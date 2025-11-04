@@ -1,0 +1,303 @@
+#+TITLE: Architecture Comparison: nostr-feeds vs Tendrl
+#+DATE: 2025-10-31
+#+AUTHOR: Claude Code Analysis
+
+* Core Pattern: Modular Nostr Engine
+
+Both systems follow the same fundamental pattern:
+#+begin_example
+Fetch Events → Store in Database → Query & Enrich → Render with Templates
+#+end_example
+
+** nostr-feeds Pattern (Original)
+#+begin_src
+nak (fetch) → SQLite (store) → Python (enrich) → Jinja2 (render)
+#+end_src
+
+** Tendrl Pattern (Evolution)
+#+begin_src
+nostrdb/notedeck (fetch) → nostrdb/LMDB (store) → Rust/Python (enrich) → Jinja2 (render)
+#+end_src
+
+* Component-by-Component Comparison
+
+** 1. Event Fetching
+
+*** nostr-feeds: nak CLI
+- Uses ~subprocess.run(['nak', 'req', ...])~
+- Generates filter commands dynamically
+- Returns JSONL from relays
+- Simple, reliable, program-agnostic
+
+#+begin_src python
+# From nostr-feeds/enricher/feed_fetcher.py
+cmd = ['nak', 'req', '-k', '1,6', '--limit', '100', 'wss://relay.damus.io']
+result = subprocess.run(cmd, capture_output=True, text=True)
+events = [json.loads(line) for line in result.stdout.strip().split('\n')]
+#+end_src
+
+*** Tendrl: nostrdb Native
+- Uses nostrdb's built-in query engine
+- Faster (no subprocess overhead)
+- Integrated with notedeck's relay pool
+- Rust-native LMDB queries
+
+#+begin_src bash
+# From tendrl/target/release/tendrl_query
+./tendrl_query --config tendrl.toml --kinds 1,6 --limit 100
+#+end_src
+
+** 2. Event Storage
+
+*** nostr-feeds: SQLite Schema
+
+#+begin_src sql
+-- From nostr-feeds/enricher/init_db.py
+CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    pubkey TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    kind INTEGER NOT NULL,
+    tags_json TEXT,              -- ⭐ Tags stored as JSON STRING
+    content TEXT,
+    sig TEXT NOT NULL,
+    event_json TEXT,
+    fetched_at INTEGER
+);
+#+end_src
+
+**Key insight**: Tags are serialized with ~json.dumps()~ and stored as TEXT:
+
+#+begin_src python
+# From nostr-feeds/enricher/db.py:640
+tags_json = json.dumps(event.get('tags', []))
+
+conn.execute("""
+    INSERT OR IGNORE INTO events
+    (id, pubkey, created_at, kind, tags_json, content, sig, event_json, fetched_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+""", (..., tags_json, ...))
+#+end_src
+
+*** Tendrl: nostrdb/LMDB Schema
+
+- Native LMDB storage (not SQL)
+- Tags stored in nostrdb's internal format
+- Queried through Rust FFI bindings
+- **PROBLEM**: Tag values are being stripped during storage or retrieval
+
+#+begin_src bash
+# Event stored correctly (nak shows all tags)
+nak req -k 3 -a dc4cd086... | jq '.tags[:2]'
+[
+  ["p", "01ddee289b1a2e90874ca3428a7a414764a6cad1abfaa985c201e7aada16d38c"],
+  ["p", "bd1e19980e2c91e6dc657e92c25762ca882eb9272d2579e221f037f93788de91"]
+]
+
+# Event retrieved incorrectly (tendrl_query strips values)
+./tendrl_query --kinds 3 --author dc4cd086... | jq '.tags[:2]'
+[
+  ["p"],
+  ["p"]
+]
+#+end_src
+
+** 3. Tag Handling
+
+*** nostr-feeds: JSON Serialization (WORKS)
+
+Storage (db.py:640):
+#+begin_src python
+tags_json = json.dumps(event.get('tags', []))
+# Result: '[["p", "abc123..."], ["e", "def456..."]]'
+#+end_src
+
+Retrieval (db.py:427):
+#+begin_src python
+if 'tags_json' in event and event['tags_json']:
+    event['tags'] = json.loads(event['tags_json'])
+    # Result: [["p", "abc123..."], ["e", "def456..."]]
+#+end_src
+
+*** Tendrl: nostrdb Native (BROKEN)
+
+The bug is somewhere in this pipeline:
+1. ~tendrl_ingest~ reads JSON event
+2. Calls nostrdb FFI to store event
+3. nostrdb stores to LMDB
+4. ~tendrl_query~ reads from LMDB
+5. Serializes back to JSON
+6. **Tag values are missing!**
+
+Possible causes:
+- nostrdb's C API doesn't preserve all tag values
+- FFI binding loses data during conversion
+- Query serialization bug
+- LMDB schema limitation
+
+** 4. Follow List Handling
+
+*** nostr-feeds: Works Perfectly
+
+#+begin_src python
+# From nostr-feeds/enricher/follows.py:86-99
+
+# Fetch kind-3 event from SQLite
+events = get_events_by_author(self.feed_db, pubkey, kinds=[3], limit=1)
+event = events[0]
+tags = event.get('tags', [])  # ← Already a Python list!
+
+# Extract p-tags
+follows = set()
+for tag in tags:
+    if isinstance(tag, list) and len(tag) >= 2 and tag[0] == 'p':
+        followed_pubkey = tag[1]  # ← This works!
+        follows.add(followed_pubkey)
+
+return follows  # Returns 533 follows for liminal
+#+end_src
+
+*** Tendrl: Broken Due to Tag Bug
+
+#+begin_src python
+# From tendrl_follows.py:82-84
+
+for tag in follow_event.get('tags', []):
+    if len(tag) >= 2 and tag[0] == 'p':
+        follows.add(tag[1])  # ← IndexError! tag is just ["p"]
+#+end_src
+
+The logic is identical, but the data is corrupted.
+
+** 5. Query & Enrichment
+
+*** nostr-feeds: Python-based
+
+#+begin_src python
+# Query by tag (uses LIKE on JSON string)
+def get_events_by_tag(conn, kind, tag_type, tag_value, limit):
+    like_pattern = f'%["{tag_type}", "{tag_value}"%'
+
+    query = """
+        SELECT * FROM events
+        WHERE kind = ? AND tags_json LIKE ?
+        ORDER BY created_at DESC LIMIT ?
+    """
+
+    cursor = conn.execute(query, (kind, like_pattern, limit))
+    return [parse_event_row(row) for row in cursor.fetchall()]
+#+end_src
+
+**Works because**: Tags are stored as JSON strings, so LIKE pattern matching finds them.
+
+*** Tendrl: Rust/nostrdb
+
+Query filters built in Rust, executed against LMDB, returned as JSON.
+
+The query engine works, but the JSON serialization is buggy.
+
+** 6. Rendering
+
+Both use Jinja2 templates - this part is identical.
+
+* Root Cause Analysis
+
+** Why nostr-feeds Works
+
+1. **Explicit serialization**: ~json.dumps(tags)~ → store as TEXT
+2. **Explicit deserialization**: ~json.loads(tags_json)~ → Python list
+3. **Simple data flow**: JSON in → TEXT storage → JSON out
+4. **No FFI layer**: Pure Python/SQLite
+
+** Why Tendrl is Broken
+
+1. **Implicit serialization**: Relies on nostrdb's internal format
+2. **FFI boundary**: Rust ↔ C ↔ nostrdb ↔ LMDB
+3. **Data loss somewhere in**:
+   - ~tendrl_ingest~ storing to nostrdb
+   - nostrdb's LMDB storage format
+   - ~tendrl_query~ reading from nostrdb
+   - JSON serialization back to client
+
+** The Smoking Gun
+
+#+begin_src bash
+# Event has 533 p-tags according to count
+./tendrl_query --kinds 3 --author dc4cd086... | \
+  jq '.tags | map(select(.[0] == "p")) | length'
+# Output: 533 ✓
+
+# But all tags are empty!
+./tendrl_query --kinds 3 --author dc4cd086... | \
+  jq '.tags[:3]'
+# Output: [["p"], ["p"], ["p"]] ✗
+#+end_src
+
+The tag *count* is preserved, but the *values* are stripped.
+
+This suggests the bug is in the **query/serialization layer**, not the storage layer.
+
+* Solution Paths
+
+** Option 1: Fix nostrdb Query Bug (Proper Fix)
+
+Debug the Rust code:
+1. Check ~tendrl/crates/tendrl_query/src/*.rs~
+2. Look for tag serialization code
+3. Add debug logging to see where values disappear
+4. Compare with how ~primus/notedeck~ queries tags
+
+** Option 2: Workaround with nak (Quick Fix)
+
+Bypass nostrdb for follow list:
+#+begin_src bash
+# Fetch follows directly from relays
+nak req -k 3 -a dc4cd086... wss://relay.damus.io | \
+  jq -r '.tags[] | select(.[0] == "p") | .[1]' > my_follows.txt
+
+# Use for filtering
+while IFS= read -r pubkey; do
+  FOLLOW_FILTER="$FOLLOW_FILTER --author $pubkey"
+done < my_follows.txt
+
+nak req -k 1 $FOLLOW_FILTER --limit 50 wss://relay.damus.io
+#+end_src
+
+** Option 3: Hybrid Approach
+
+Use nostrdb for event storage but nak for querying:
+- Keep ~tendrl_ingest~ for fast batch imports
+- Use ~nak req~ with filters for actual queries
+- Render with existing Jinja2 templates
+
+This combines the speed of nostrdb storage with the reliability of nak querying.
+
+* Next Steps
+
+** Immediate Action
+1. Create test event with tags
+2. Ingest with ~tendrl_ingest~
+3. Query with ~tendrl_query~
+4. Add debug logging to trace where tag values disappear
+
+** Compare with Working Code
+1. Check how ~primus/notedeck~ queries nostrdb
+2. Look for tag-handling differences
+3. Port working code to tendrl_query
+
+** Document the Fix
+Once identified, update:
+- ~tendrl/FOLLOW_LIST_BUG.org~
+- ~tendrl/ARCHITECTURE_COMPARISON.org~ (this file)
+- Add regression test for tag preservation
+
+* Key Takeaways
+
+1. **nostr-feeds architecture is proven**: 3 years of production use
+2. **SQLite + JSON strings is reliable**: Explicit serialization works
+3. **nostrdb is faster but complex**: FFI layer introduces bugs
+4. **Tendrl's goal is valid**: Using notedeck's engine is more efficient
+5. **The bug is fixable**: It's in the query layer, not the design
+
+The pattern evolution from ~nak + SQLite~ to ~nostrdb + notedeck~ is sound.
+The implementation just needs debugging in the tag serialization code.

@@ -1,0 +1,86 @@
+{# Generic event card template - fallback for any event kind #}
+{# Extracts common metadata and renders basic event info #}
+{%- set kind_name_map = {
+    0: 'Profile',
+    1: 'Note',
+    3: 'Contacts',
+    4: 'DM',
+    5: 'Delete',
+    6: 'Repost',
+    7: 'Reaction',
+    16: 'Generic Repost',
+    40: 'Channel Create',
+    41: 'Channel Metadata',
+    42: 'Channel Message',
+    43: 'Channel Hide',
+    44: 'Channel Mute',
+    1984: 'Report',
+    9734: 'Zap Request',
+    9735: 'Zap',
+    9802: 'Highlight',
+    10002: 'Relay List',
+    30000: 'Categorized People',
+    30001: 'Categorized Bookmarks',
+    30008: 'Profile Badges',
+    30009: 'Badge Definition',
+    30017: 'Create/Update Stall',
+    30018: 'Create/Update Product',
+    30023: 'Long-form Article',
+    30024: 'Draft Long-form',
+    30030: 'Emoji Set',
+    30040: 'Publication Index',
+    30041: 'Publication Content',
+    30078: 'App Data',
+    30311: 'Live Event',
+    30315: 'User Status',
+    30402: 'Classified Listing',
+    30403: 'Draft Classified',
+    30818: 'Wiki Article'
+} -%}
+{%- set kind = event.kind -%}
+{%- set kind_name = kind_name_map.get(kind, 'Event') -%}
+
+{# Extract title if present #}
+{%- set title = '' -%}
+{%- for tag in event.tags -%}
+  {%- if tag[0] == 'title' and tag|length > 1 -%}
+    {%- set title = tag[1] -%}
+  {%- endif -%}
+{%- endfor -%}
+
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "generic", "kind": kind, "kind_name": kind_name, "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "depth": meta.depth|default(0)}|to_json }}>>>
+┌─ {{ kind_name }} (kind {{ kind }}) ────────────────────────
+│
+{% if title -%}
+│ {{ title }}
+│
+{%- endif %}
+│ {% if deps.author -%}
+{{ deps.author.display_name or deps.author.name or 'Unknown' }} (@{{ deps.author.name or 'unknown' }})
+│ {%- else -%}
+Unknown Author
+│ {%- endif %}
+│ {{ event.created_at|format_relative_time }}
+│
+│ {{ event.content|truncate(200) }}
+│
+{% if deps.referenced_events -%}
+│ ─── Referenced Events ({{ deps.referenced_events|length }}) ───
+{% for ref_event in deps.referenced_events -%}
+│
+{{ ref_event|render_preview|indent(2, first=True) }}
+{% endfor -%}
+{%- endif %}
+{% if deps.unfetched_references -%}
+│ ─── Unfetched References ({{ deps.unfetched_references|length }}) ───
+{% for ref in deps.unfetched_references -%}
+│   🔗 {{ ref.type }}: <<<REF:nostr:{{ ref.identifier }}>>>{{ ref.identifier[:24]}}...<<</REF>>>{% if ref.relays %} ({{ ref.relays|length }} relay hints){% endif %}
+
+{% endfor -%}
+{%- endif %}
+{% if deps.reactions or deps.replies or deps.zaps -%}
+│ {% if deps.reactions %}❤️ {{ deps.reactions.count }}  {% endif %}{% if deps.replies %}💬 {{ deps.replies.count }}  {% endif %}{% if deps.zaps %}⚡ {{ deps.zaps.total_sats|format_sats }}{% endif %}
+{%- endif %}
+└─ <<<REF:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>View event<<</REF>>>
+<<</EVENT>>>

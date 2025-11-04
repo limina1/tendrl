@@ -1,0 +1,70 @@
+{# Thread View Template - Focused Event with Recursive Replies #}
+
+{# Macro for Recursive Reply Rendering - MUST BE FIRST #}
+{% macro render_reply(reply_data, depth) -%}
+{%- set reply_event = reply_data.event -%}
+{%- set reply_deps = reply_data.deps -%}
+{%- set reply_meta = reply_data.meta -%}
+{%- set indent = '  ' * depth -%}
+
+{{ indent }}<<<EVENT:{{ reply_event.id|to_nevent(reply_event.pubkey)|to_nostr_uri }}>>>
+{{ indent }}<<<METADATA:{{ {"type": "reply", "author": (reply_deps.author.pubkey|to_npub|to_nostr_uri) if reply_deps.author else "unknown", "depth": depth}|to_json }}>>>
+{{ indent }}┌─────────────────────────────────────────────
+{%- if reply_deps.author %}
+{{ indent }}│ {{ reply_deps.author.display_name or reply_deps.author.name or "Unknown" }} (@{{ reply_deps.author.name or "unknown" }})
+{%- else %}
+{{ indent }}│ Unknown Author
+{%- endif %}
+{{ indent }}│ {{ reply_meta.formatted_time }}
+{{ indent }}│
+{%- for line in reply_event.content.split('\n')[:3] %}
+{{ indent }}│ {{ line|truncate_content(70) }}
+{%- endfor %}
+{{ indent }}│
+{{ indent }}│ {% if reply_deps.reactions and reply_deps.reactions.count > 0 %}❤️ {{ reply_deps.reactions.count }}  {% endif %}{% if reply_deps.replies %}{% if reply_deps.replies is mapping %}{% if reply_deps.replies.count > 0 %}💬 {{ reply_deps.replies.count }}  {% endif %}{% elif reply_deps.replies|length > 0 %}💬 {{ reply_deps.replies|length }}  {% endif %}{% endif %}{% if reply_deps.zaps and reply_deps.zaps.count > 0 %}⚡ {{ reply_deps.zaps.total_sats|default(0)|format_sats }}{% endif %}
+{{ indent }}└─────────────────────────────────────────────
+{{ indent }}<<</EVENT>>>
+
+{%- if reply_deps.replies and reply_deps.replies is iterable and reply_deps.replies is not mapping %}
+{%- for sub_reply in reply_deps.replies %}
+{{ render_reply(sub_reply, depth + 1) }}
+{%- endfor %}
+{%- endif %}
+{%- endmacro %}
+
+{# Focused Event (depth 0) #}
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "thread_root", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "depth": meta.depth|default(0)}|to_json }}>>>
+════════════════════════════════════════════════════════════════
+{% if deps.author -%}
+{{ deps.author.display_name or deps.author.name or "Unknown" }} (@{{ deps.author.name or "unknown" }})
+{%- if deps.author.nip05_verified %} ✓ {{ deps.author.nip05 }}{% endif %}
+{%- else -%}
+Unknown Author
+{%- endif %}
+{{ meta.formatted_time }}
+
+{{ event.content }}
+
+{% if deps.reactions and deps.reactions.count > 0 -%}
+<<<STAT:reactions:{{ deps.reactions.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>❤️ {{ deps.reactions.count }}<<</STAT>>>
+{%- endif %}
+{%- if deps.replies %}
+  {%- if deps.replies is mapping %}
+    {%- if deps.replies.count > 0 %}  <<<STAT:replies:{{ deps.replies.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>💬 {{ deps.replies.count }}<<</STAT>>>{%- endif %}
+  {%- elif deps.replies|length > 0 %}  <<<STAT:replies:{{ deps.replies|length }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>💬 {{ deps.replies|length }}<<</STAT>>>
+  {%- endif %}
+{%- endif %}
+{%- if deps.zaps and deps.zaps.count > 0 %}  <<<STAT:zaps:{{ deps.zaps.total_sats|default(0) }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>⚡ {{ deps.zaps.total_sats|default(0)|format_sats }}<<</STAT>>>
+{%- endif %}
+{%- if deps.reposts and deps.reposts.count > 0 %}  <<<STAT:reposts:{{ deps.reposts.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>🔁 {{ deps.reposts.count }}<<</STAT>>>
+{%- endif %}
+════════════════════════════════════════════════════════════════
+<<</EVENT>>>
+
+{# Recursive Reply Tree #}
+{% if deps.replies and deps.replies is iterable and deps.replies is not mapping %}
+{% for reply in deps.replies %}
+{{ render_reply(reply, 1) }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,11 @@
+💬 {{ count|default(0) }} replies
+{% if details -%}
+{%- for reply in details[:10] %}
+├─ {{ reply.author_name or "Unknown" }}: {{ reply.content|truncate_content(60) }}
+{% endfor -%}
+{%- if count > 10 %}
+└─ [{{ count - 10 }} more replies...]
+{%- endif %}
+{%- else %}
+[Press ENTER to load replies]
+{%- endif %}

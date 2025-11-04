@@ -21,6 +21,3 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 hex = { workspace = true }
 uuid = { workspace = true }
-
-# Primus dependencies (temporary until fully migrated)
-notedeck = { path = "../../../primus/crates/notedeck" }

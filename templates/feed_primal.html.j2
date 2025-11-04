@@ -1,0 +1,42 @@
+{# Feed Template with Primal Layout #}
+{% extends "layout.html.j2" %}
+
+{% block title %}{{ feed_name }}{% endblock %}
+
+{% block content %}
+  {# Feed stats bar #}
+  <div class="feed-stats-bar">
+    <span class="stat-item">
+      <span class="stat-value">{{ notes | length }}</span>
+      <span class="stat-label">notes</span>
+    </span>
+    <span class="stat-item">
+      <span class="stat-value">{{ notes | sum(attribute='_enriched.stats.zaps.total_sats') | format_sats }}</span>
+      <span class="stat-label">sats total</span>
+    </span>
+    <span class="stat-item">
+      <span class="stat-value">{{ notes | sum(attribute='_enriched.stats.reactions.count') }}</span>
+      <span class="stat-label">reactions</span>
+    </span>
+  </div>
+
+  {# Feed content #}
+  <div class="feed-list">
+    {% if notes %}
+      {% for note in notes %}
+        {% include 'note.html.j2' %}
+      {% endfor %}
+    {% else %}
+      <div class="feed-empty">
+        <p>No notes in this feed yet.</p>
+      </div>
+    {% endif %}
+  </div>
+
+  {# Load more #}
+  <div class="load-more-section">
+    <button class="btn-secondary load-more-btn" data-feed="{{ feed_name }}">
+      Load More
+    </button>
+  </div>
+{% endblock %}

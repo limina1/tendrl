@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use enostr::Pubkey;
 use nostrdb::{NoteKey, ProfileKey};
-use notedeck::NoteRef;
+use crate::NoteRef;
 
 /// A `NoteUnit` represents a cohesive piece of data derived from notes
 #[derive(Debug, Clone)]

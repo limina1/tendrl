@@ -1,0 +1,191 @@
+# Example: Global vs Follows Feed Configuration
+
+# =============================================================================
+# GLOBAL FEED - Public timeline from all users
+# =============================================================================
+[feed.global_notes]
+name = "Global Feed"
+description = "All notes from configured relays"
+display_kinds = [1]
+mode = "global"  # Fetch from everyone
+
+[feed.global_notes.pattern]
+filter_type = "hybrid"
+
+[[feed.global_notes.pattern.local_queries]]
+kinds = [1]
+limit = 100
+note = "Backfill all notes"
+
+[[feed.global_notes.pattern.local_queries]]
+kinds = [7, 9735, 6, 0]
+limit = 2000
+note = "Backfill engagement data"
+
+[[feed.global_notes.pattern.remote_filters]]
+kinds = [1, 7, 9735, 6, 0]
+limit = 250
+
+[feed.global_notes.root]
+kind = 1
+
+[feed.global_notes.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.global_notes.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats", "by_user"]
+
+[feed.global_notes.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "users"]
+
+
+# =============================================================================
+# FOLLOWS FEED - Only from users you follow
+# =============================================================================
+[feed.my_follows]
+name = "Following"
+description = "Notes from people I follow"
+display_kinds = [1]
+mode = "follows"  # Only from follow list
+
+# Your npub (the daemon will fetch your kind-3 follow list)
+user_npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+
+# Alternative: Provide hex pubkey directly
+# user_pubkey = "df0b8d0b27d8c1e0f08a6c9c6f3f2e4f7b7c9d6e5f8a1b2c3d4e5f6a7b8c9d0"
+
+[feed.my_follows.pattern]
+filter_type = "hybrid"
+
+# The daemon will automatically add "authors = [...]" from your follow list
+[[feed.my_follows.pattern.local_queries]]
+kinds = [1]
+# authors will be populated from kind-3 follow list
+limit = 100
+note = "Backfill notes from follows"
+
+[[feed.my_follows.pattern.local_queries]]
+kinds = [7, 9735, 6, 0]
+limit = 2000
+note = "Backfill engagement"
+
+[[feed.my_follows.pattern.remote_filters]]
+kinds = [1, 7, 9735, 6, 0]
+# authors will be populated from kind-3 follow list
+limit = 250
+
+[feed.my_follows.root]
+kind = 1
+
+[feed.my_follows.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.my_follows.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats", "by_user"]
+
+[feed.my_follows.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "users"]
+
+
+# =============================================================================
+# SPECIFIC AUTHOR FEED - Single user timeline
+# =============================================================================
+[feed.author_timeline]
+name = "Author Timeline"
+description = "All notes from a specific author"
+display_kinds = [1]
+mode = "author"  # Single author
+
+# Specify the author
+author_npub = "npub1m3xdppkd0njmrqe2ma8a6ys39zvgp5k8u22mev8xsnqp4nh80srqhqa5sf"
+
+[feed.author_timeline.pattern]
+filter_type = "hybrid"
+
+[[feed.author_timeline.pattern.local_queries]]
+kinds = [1]
+# authors will be set to the single author
+limit = 100
+
+[[feed.author_timeline.pattern.local_queries]]
+kinds = [7, 9735, 6, 0]
+limit = 2000
+
+[[feed.author_timeline.pattern.remote_filters]]
+kinds = [1, 7, 9735, 6, 0]
+limit = 250
+
+[feed.author_timeline.root]
+kind = 1
+
+[feed.author_timeline.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.author_timeline.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats", "by_user"]
+
+[feed.author_timeline.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "users"]
+
+
+# =============================================================================
+# HOW IT WORKS
+# =============================================================================
+#
+# MODE: "global"
+# - Fetches from all configured relays
+# - No author filtering
+# - Public timeline
+#
+# MODE: "follows"
+# - Fetches your kind-3 follow list event
+# - Extracts all pubkeys you follow (p-tags)
+# - Adds "authors = [pk1, pk2, ...]" to filters
+# - Only shows notes from people you follow
+#
+# MODE: "author"
+# - Single author timeline
+# - Adds "authors = [author_pubkey]" to filters
+# - Shows only that author's notes
+#
+# =============================================================================
+# USAGE
+# =============================================================================
+#
+# # Global feed (everyone)
+# tendrl_query --feed global_notes --config follows_feed_example.toml
+#
+# # Follows feed (people you follow)
+# tendrl_query --feed my_follows --config follows_feed_example.toml
+#
+# # Author feed (specific person)
+# tendrl_query --feed author_timeline --config follows_feed_example.toml
+#
+# =============================================================================

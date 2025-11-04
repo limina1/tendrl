@@ -1,0 +1,24 @@
+<<<EVENT:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>
+<<<METADATA:{{ {"type": "note", "author": (deps.author.pubkey|to_npub|to_nostr_uri) if deps.author else "unknown", "depth": meta.depth|default(0)}|to_json }}>>>
+────────────────────────────────────────────────────────────────
+{% if deps.author -%}
+{{ deps.author.display_name or deps.author.name or "Unknown" }} (@{{ deps.author.name or "unknown" }})
+{%- if deps.author.nip05_verified %} ✓ {{ deps.author.nip05 }}{% endif %}
+{%- else -%}
+Unknown Author
+{%- endif %}
+{{ meta.formatted_time }}
+
+{{ event.content|render_nprofiles|linkify }}
+
+{% if deps.reactions and deps.reactions.count > 0 -%}
+<<<STAT:reactions:{{ deps.reactions.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>❤️ {{ deps.reactions.count }}<<</STAT>>>
+{%- endif %}
+{%- if deps.replies and deps.replies.count > 0 %}  <<<STAT:replies:{{ deps.replies.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>💬 {{ deps.replies.count }}<<</STAT>>>
+{%- endif %}
+{%- if deps.zaps and deps.zaps.count > 0 %}  <<<STAT:zaps:{{ deps.zaps.total_sats|default(0) }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>⚡ {{ deps.zaps.total_sats|default(0)|format_sats }}<<</STAT>>>
+{%- endif %}
+{%- if deps.reposts and deps.reposts.count > 0 %}  <<<STAT:reposts:{{ deps.reposts.count }}:{{ event.id|to_nevent(event.pubkey)|to_nostr_uri }}>>>🔁 {{ deps.reposts.count }}<<</STAT>>>
+{%- endif %}
+────────────────────────────────────────────────────────────────
+<<</EVENT>>>
