@@ -7,6 +7,8 @@ members = [
     "crates/tendrl_query",
     "crates/tendrl_profile_fetcher",
     "crates/tendrl_ingest",
+    "crates/enostr",
+    "crates/tokenator",
 ]
 
 [workspace.package]
@@ -19,10 +21,8 @@ repository = "https://github.com/yourusername/tendrl"
 [workspace.dependencies]
 # Core dependencies
 nostrdb = { git = "https://github.com/damus-io/nostrdb-rs", rev = "2b2e5e43c019b80b98f1db6a03a1b88ca699bfa3" }
-enostr = { path = "../primus/crates/enostr" }
-nostr = { version = "0.37.0", default-features = false, features = ["std"] }
-notedeck = { path = "../primus/crates/notedeck" }
-notedeck_ui = { path = "../primus/crates/notedeck_ui" }
+enostr = { path = "crates/enostr" }
+nostr = { version = "0.37.0", default-features = false, features = ["std", "nip49"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -52,9 +52,10 @@ hashbrown = "0.15.2"
 mio = { version = "1.0.3", features = ["os-poll", "net"] }
 serde_derive = "1"
 ewebsock = { version = "0.8.0", features = ["tls"] }
+profiling = "1"
 
-# Primus dependencies
-tokenator = { path = "../primus/crates/tokenator" }
+# Tokenator (from Notedeck)
+tokenator = { path = "crates/tokenator" }
 
 # Internal crates
 tendrl_core = { path = "crates/tendrl_core" }
