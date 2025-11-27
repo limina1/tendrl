@@ -1,0 +1,45 @@
+# Test Configuration for Event Fetching Demo
+# Minimal config to demonstrate fetching and rendering
+
+[global]
+db_path = "/tmp/tendrl-test-db"
+default_relays = [
+    "wss://relay.damus.io",
+    "wss://nos.lol"
+]
+
+[feed.notes]
+name = "Recent Notes"
+description = "Recent short-form notes from Nostr"
+display_kinds = [1]
+relay_mode = "general"
+
+[feed.notes.pattern]
+filter_type = "hybrid"
+
+# Backfill: Get 20 recent notes from local DB
+[[feed.notes.pattern.local_queries]]
+kinds = [1]
+limit = 20
+
+# Stream: Subscribe to new notes (limit per relay)
+[[feed.notes.pattern.remote_filters]]
+kinds = [1]
+limit = 10
+
+[feed.zaps]
+name = "Zaps"
+description = "Lightning zap receipts"
+display_kinds = [9735]
+relay_mode = "general"
+
+[feed.zaps.pattern]
+filter_type = "hybrid"
+
+[[feed.zaps.pattern.local_queries]]
+kinds = [9735]
+limit = 20
+
+[[feed.zaps.pattern.remote_filters]]
+kinds = [9735]
+limit = 10
