@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tendrl Parasitic Theme - p5.js Demo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #0a0a0a;
+            font-family: 'Courier New', monospace;
+            color: #00ff41;
+        }
+        #canvas-container {
+            position: relative;
+        }
+        .controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff41;
+            padding: 20px;
+            border-radius: 8px;
+            min-width: 250px;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+        .controls h3 {
+            margin-top: 0;
+            color: #00ff41;
+            text-shadow: 0 0 10px #00ff41;
+        }
+        .control-row {
+            margin: 15px 0;
+        }
+        .control-row label {
+            display: block;
+            margin-bottom: 5px;
+            color: #00cc33;
+        }
+        .control-row input[type="range"] {
+            width: 100%;
+        }
+        .control-row button {
+            width: 100%;
+            padding: 10px;
+            background: #00ff41;
+            color: #0a0a0a;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+        .control-row button:hover {
+            background: #33ff66;
+            box-shadow: 0 0 15px #00ff41;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0, 255, 65, 0.1);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .status-line {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        .info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ff41;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            font-size: 12px;
+        }
+        .legend {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #00ff41;
+        }
+        .legend-item {
+            margin: 5px 0;
+        }
+        .color-box {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 5px;
+            border: 1px solid #00ff41;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="controls">
+        <h3>🦠 INFECTION CONTROLS</h3>
+
+        <div class="control-row">
+            <label>Infection Level: <span id="level-value">30</span>%</label>
+            <input type="range" id="infection-level" min="0" max="100" value="30">
+        </div>
+
+        <div class="control-row">
+            <label>Lambda (λ): <span id="lambda-value">0.30</span></label>
+            <input type="range" id="lambda" min="0.05" max="0.8" step="0.05" value="0.30">
+        </div>
+
+        <div class="control-row">
+            <label>Logo Flicker (Hz): <span id="flicker-value">3</span></label>
+            <input type="range" id="flicker-speed" min="0" max="10" step="1" value="3">
+        </div>
+
+        <div class="control-row">
+            <button id="trigger-infection">⚡ TRIGGER INFECTION</button>
+        </div>
+
+        <div class="control-row">
+            <button id="toggle-auto">🔄 Auto: ON</button>
+        </div>
+
+        <div class="status">
+            <div class="status-line">
+                <span>STATE:</span>
+                <span id="state">HOST</span>
+            </div>
+            <div class="status-line">
+                <span>INTENSITY:</span>
+                <span id="intensity">0.00</span>
+            </div>
+            <div class="status-line">
+                <span>NEXT:</span>
+                <span id="next">--</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="info">
+        <strong>🦠 Parasitic Theme Demo</strong>
+        <div class="legend">
+            <div class="legend-item">
+                <span class="color-box" style="background: #efe6dc;"></span>
+                Host (Alexandria)
+            </div>
+            <div class="legend-item">
+                <span class="color-box" style="background: #00ff41;"></span>
+                Parasite (Tendrl)
+            </div>
+        </div>
+        <p style="margin-top: 10px; font-size: 11px;">
+            Click cards to trigger hover infection (15% chance)
+        </p>
+    </div>
+
+    <script src="parasitic-theme-sketch.js"></script>
+</body>
+</html>
