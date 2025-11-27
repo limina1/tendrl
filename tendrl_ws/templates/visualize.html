@@ -52,7 +52,7 @@
     }
     .network-svg {
         width: 100%;
-        height: 500px;
+        height: 750px;
         display: block;
     }
     .network-controls {
@@ -282,19 +282,21 @@
     }
     /* Action buttons for data loading */
     .btn-action {
-        font-size: 0.7rem;
-        padding: 0.35rem 0.6rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        padding: 0.625rem 1.25rem;
+        background: var(--accent-primary);
+        border: 1px solid var(--accent-primary);
+        border-radius: 0.375rem;
         cursor: pointer;
-        color: var(--text-secondary);
+        color: white;
+        font-weight: 500;
         transition: all 0.15s ease;
     }
     .btn-action:hover {
-        background: var(--bg-tertiary);
-        color: var(--text-primary);
-        border-color: var(--accent-primary);
+        background: var(--accent-secondary);
+        border-color: var(--accent-secondary);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     .btn-action:active {
         transform: scale(0.97);
@@ -302,6 +304,17 @@
     .btn-action:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+    }
+    .graph-actions {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        align-items: center;
+    }
+    .graph-actions .loading-status {
+        color: var(--text-muted);
+        font-size: 0.875rem;
+        margin-left: 0.5rem;
     }
     .loading-spinner {
         display: inline-block;
@@ -317,34 +330,6 @@
     .tooltip-info {
         color: var(--text-muted);
         font-size: 0.75rem;
-    }
-    /* Kind distribution */
-    .viz-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
-        margin-top: 2rem;
-    }
-    @media (min-width: 768px) {
-        .viz-grid {
-            grid-template-columns: 1fr 1fr;
-        }
-    }
-    .viz-card {
-        background-color: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 0.5rem;
-        overflow: hidden;
-    }
-    .viz-card-header {
-        padding: 1rem;
-        border-bottom: 1px solid var(--border-color);
-    }
-    .viz-card-title {
-        font-weight: 600;
-    }
-    .viz-card-body {
-        padding: 1rem;
     }
 </style>
 {% endblock %}
@@ -414,47 +399,86 @@
                     </small>
                 </div>
 
-                <!-- Data Loading -->
+                <!-- Kind Visibility with Limits -->
                 <div class="setting-group">
-                    <label>Data Loading:</label>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                        <button id="refresh-btn" class="btn-action" title="Fetch newest events">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block;">Show Kinds & Limits:</label>
+
+                    <!-- 30040 Index -->
+                    <div style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-label" style="margin-bottom: 0.25rem;">
+                            <input type="checkbox" data-kind="30040" checked>
+                            <span class="legend-color" style="background: #3b82f6;"></span>
+                            <span>30040 (Index)</span>
+                        </label>
+                        <div style="padding-left: 1.5rem;">
+                            <label style="font-size: 0.7rem; color: var(--text-muted);">
+                                Limit: <span id="limit-30040-value">50</span>/<span id="total-30040">?</span>
+                            </label>
+                            <input type="range" id="limit-30040" min="10" max="500" step="10" value="50" style="width: 100%;">
+                        </div>
+                    </div>
+
+                    <!-- 30041 Section -->
+                    <div style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-label" style="margin-bottom: 0.25rem;">
+                            <input type="checkbox" data-kind="30041" checked>
+                            <span class="legend-color" style="background: #10b981;"></span>
+                            <span>30041 (Section)</span>
+                        </label>
+                        <div style="padding-left: 1.5rem;">
+                            <label style="font-size: 0.7rem; color: var(--text-muted);">
+                                Limit: <span id="limit-30041-value">50</span>/<span id="total-30041">?</span>
+                            </label>
+                            <input type="range" id="limit-30041" min="10" max="500" step="10" value="50" style="width: 100%;">
+                        </div>
+                    </div>
+
+                    <!-- 30023 Article -->
+                    <div style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-label" style="margin-bottom: 0.25rem;">
+                            <input type="checkbox" data-kind="30023">
+                            <span class="legend-color" style="background: #8b5cf6;"></span>
+                            <span>30023 (Article)</span>
+                        </label>
+                        <div style="padding-left: 1.5rem;">
+                            <label style="font-size: 0.7rem; color: var(--text-muted);">
+                                Limit: <span id="limit-30023-value">50</span>/<span id="total-30023">?</span>
+                            </label>
+                            <input type="range" id="limit-30023" min="10" max="500" step="10" value="50" style="width: 100%;">
+                        </div>
+                    </div>
+
+                    <!-- 30818 Wiki -->
+                    <div style="margin-bottom: 0.75rem;">
+                        <label class="checkbox-label" style="margin-bottom: 0.25rem;">
+                            <input type="checkbox" data-kind="30818">
+                            <span class="legend-color" style="background: #f59e0b;"></span>
+                            <span>30818 (Wiki)</span>
+                        </label>
+                        <div style="padding-left: 1.5rem;">
+                            <label style="font-size: 0.7rem; color: var(--text-muted);">
+                                Limit: <span id="limit-30818-value">50</span>/<span id="total-30818">?</span>
+                            </label>
+                            <input type="range" id="limit-30818" min="10" max="500" step="10" value="50" style="width: 100%;">
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color);">
+                        <button id="refresh-btn" class="btn-action" title="Fetch newest events from relays">
                             Refresh
                         </button>
-                        <button id="load-more-btn" class="btn-action" title="Load older events">
+                        <button id="load-more-btn" class="btn-action" title="Load older events from relays">
                             Load More
                         </button>
                     </div>
                     <div id="loading-status" style="color: var(--text-muted); font-size: 0.7rem; margin-top: 0.5rem; display: none;">
                         <span class="loading-spinner">⏳</span> <span id="loading-text">Loading...</span>
                     </div>
-                </div>
 
-                <!-- Kind Visibility -->
-                <div class="setting-group">
-                    <label>Show Kinds:</label>
-                    <div class="kind-checkbox-list">
-                        <label class="checkbox-label">
-                            <input type="checkbox" data-kind="30040" checked>
-                            <span class="legend-color" style="background: #3b82f6;"></span>
-                            <span>30040 (Index)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" data-kind="30041" checked>
-                            <span class="legend-color" style="background: #10b981;"></span>
-                            <span>30041 (Section)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" data-kind="30023">
-                            <span class="legend-color" style="background: #8b5cf6;"></span>
-                            <span>30023 (Article)</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" data-kind="30818">
-                            <span class="legend-color" style="background: #f59e0b;"></span>
-                            <span>30818 (Wiki)</span>
-                        </label>
-                    </div>
+                    <small style="color: var(--text-muted); display: block; margin-top: 0.5rem;">
+                        Lower limits = faster rendering
+                    </small>
                 </div>
             </div>
         </div>
@@ -554,56 +578,6 @@
         <svg id="network-graph" class="network-svg"></svg>
         <div id="node-tooltip" class="node-tooltip" style="display: none;"></div>
     </div>
-
-    <!-- Kind Distribution -->
-    <div class="viz-grid">
-        <div class="viz-card">
-            <div class="viz-card-header">
-                <span class="viz-card-title">Events by Kind</span>
-            </div>
-            <div class="viz-card-body" id="kind-distribution">
-                {% if kind_distribution %}
-                {% for item in kind_distribution %}
-                <div style="margin-bottom: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                        <span class="kind-badge kind-{{ item.kind }}">Kind {{ item.kind }}</span>
-                        <span style="font-size: 0.875rem; color: var(--text-secondary);">{{ item.count }}</span>
-                    </div>
-                    <div style="height: 8px; background-color: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
-                        <div style="height: 100%; width: {{ item.percentage }}%; background-color: var(--accent-primary); border-radius: 4px;"></div>
-                    </div>
-                </div>
-                {% endfor %}
-                {% else %}
-                <p style="color: var(--text-muted);">No kind distribution data</p>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="viz-card">
-            <div class="viz-card-header">
-                <span class="viz-card-title">Recent Activity</span>
-            </div>
-            <div class="viz-card-body" style="max-height: 300px; overflow-y: auto;">
-                {% if recent_events %}
-                {% for event in recent_events %}
-                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="kind-badge kind-{{ event.kind }}">{{ event.kind }}</span>
-                        {% if event.title %}
-                        <span style="flex: 1; margin-left: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            {{ event.title }}
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% else %}
-                <p style="color: var(--text-muted);">No recent events</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
 </div>
 
 <script>
@@ -624,6 +598,10 @@ function togglePanel(panelId) {
 
     const graphSettings = {
         maxDepth: 2,
+        limit_30040: 50,
+        limit_30041: 50,
+        limit_30023: 50,
+        limit_30818: 50,
         starMode: true,
         enabledKinds: new Set([30040, 30041]),
         disabledAuthors: new Set()  // authors to hide
@@ -635,6 +613,10 @@ function togglePanel(panelId) {
             if (saved) {
                 const parsed = JSON.parse(saved);
                 graphSettings.maxDepth = parsed.maxDepth ?? 2;
+                graphSettings.limit_30040 = parsed.limit_30040 ?? 50;
+                graphSettings.limit_30041 = parsed.limit_30041 ?? 50;
+                graphSettings.limit_30023 = parsed.limit_30023 ?? 50;
+                graphSettings.limit_30818 = parsed.limit_30818 ?? 50;
                 graphSettings.starMode = parsed.starMode ?? true;
                 graphSettings.enabledKinds = new Set(parsed.enabledKinds ?? [30040, 30041]);
                 graphSettings.disabledAuthors = new Set(parsed.disabledAuthors ?? []);
@@ -645,6 +627,14 @@ function togglePanel(panelId) {
         // Sync UI with loaded settings
         document.getElementById('max-depth').value = graphSettings.maxDepth;
         document.getElementById('depth-value').textContent = graphSettings.maxDepth;
+        document.getElementById('limit-30040').value = graphSettings.limit_30040;
+        document.getElementById('limit-30040-value').textContent = graphSettings.limit_30040;
+        document.getElementById('limit-30041').value = graphSettings.limit_30041;
+        document.getElementById('limit-30041-value').textContent = graphSettings.limit_30041;
+        document.getElementById('limit-30023').value = graphSettings.limit_30023;
+        document.getElementById('limit-30023-value').textContent = graphSettings.limit_30023;
+        document.getElementById('limit-30818').value = graphSettings.limit_30818;
+        document.getElementById('limit-30818-value').textContent = graphSettings.limit_30818;
         document.getElementById('star-mode').checked = graphSettings.starMode;
         // Sync kind checkboxes
         document.querySelectorAll('[data-kind]').forEach(cb => {
@@ -656,6 +646,10 @@ function togglePanel(panelId) {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify({
                 maxDepth: graphSettings.maxDepth,
+                limit_30040: graphSettings.limit_30040,
+                limit_30041: graphSettings.limit_30041,
+                limit_30023: graphSettings.limit_30023,
+                limit_30818: graphSettings.limit_30818,
                 starMode: graphSettings.starMode,
                 enabledKinds: [...graphSettings.enabledKinds],
                 disabledAuthors: [...graphSettings.disabledAuthors]
@@ -671,7 +665,7 @@ function togglePanel(panelId) {
     const svg = d3.select("#network-graph");
     const container = svg.node().parentElement;
     const width = container.clientWidth;
-    const height = 500;
+    const height = 750;
 
     svg.attr("viewBox", [0, 0, width, height]);
 
@@ -684,6 +678,8 @@ function togglePanel(panelId) {
     // Star-mode force simulation parameters (matching Alexandria)
     const STAR_CENTER_CHARGE = -300;
     const CONTENT_NODE_CHARGE = -50;
+    const STAR_LINK_STRENGTH = 0.5;
+    const INTER_STAR_LINK_STRENGTH = 0.2;
     const STAR_LINK_DISTANCE = 80;
     const INTER_STAR_DISTANCE = 200;
     const CENTER_GRAVITY = 0.02;
@@ -732,6 +728,35 @@ function togglePanel(panelId) {
     document.getElementById('max-depth').addEventListener('input', (e) => {
         graphSettings.maxDepth = parseInt(e.target.value);
         document.getElementById('depth-value').textContent = e.target.value;
+        saveSettings();
+        refreshGraph();
+    });
+
+    // Per-kind limit sliders
+    document.getElementById('limit-30040').addEventListener('input', (e) => {
+        graphSettings.limit_30040 = parseInt(e.target.value);
+        document.getElementById('limit-30040-value').textContent = e.target.value;
+        saveSettings();
+        refreshGraph();
+    });
+
+    document.getElementById('limit-30041').addEventListener('input', (e) => {
+        graphSettings.limit_30041 = parseInt(e.target.value);
+        document.getElementById('limit-30041-value').textContent = e.target.value;
+        saveSettings();
+        refreshGraph();
+    });
+
+    document.getElementById('limit-30023').addEventListener('input', (e) => {
+        graphSettings.limit_30023 = parseInt(e.target.value);
+        document.getElementById('limit-30023-value').textContent = e.target.value;
+        saveSettings();
+        refreshGraph();
+    });
+
+    document.getElementById('limit-30818').addEventListener('input', (e) => {
+        graphSettings.limit_30818 = parseInt(e.target.value);
+        document.getElementById('limit-30818-value').textContent = e.target.value;
         saveSettings();
         refreshGraph();
     });
@@ -831,6 +856,10 @@ function togglePanel(panelId) {
 
     function buildApiUrl() {
         const params = new URLSearchParams();
+        params.set('limit_30040', graphSettings.limit_30040);
+        params.set('limit_30041', graphSettings.limit_30041);
+        params.set('limit_30023', graphSettings.limit_30023);
+        params.set('limit_30818', graphSettings.limit_30818);
         params.set('max_depth', graphSettings.maxDepth);
         params.set('kinds', [...graphSettings.enabledKinds].join(','));
         return `/api/events?${params}`;
@@ -871,6 +900,14 @@ function togglePanel(panelId) {
         // Update "Showing X of Y events" in Settings panel
         document.getElementById('displayed-count').textContent = stats.displayed || 0;
         document.getElementById('loaded-count').textContent = stats.totalLoaded || 0;
+
+        // Update per-kind totals in slider labels
+        const fetchedByKind = stats.fetchedByKind || {};
+        document.getElementById('total-30040').textContent = fetchedByKind[30040] || 0;
+        document.getElementById('total-30041').textContent = fetchedByKind[30041] || 0;
+        document.getElementById('total-30023').textContent = fetchedByKind[30023] || 0;
+        document.getElementById('total-30818').textContent = fetchedByKind[30818] || 0;
+
         // After author filtering, update filtered count in renderGraph
     }
 
@@ -991,12 +1028,34 @@ function togglePanel(panelId) {
             simulation = d3.forceSimulation(nodes)
                 .force("link", d3.forceLink(links)
                     .id(d => d.id)
-                    .distance(d => d.isSequential ? STAR_LINK_DISTANCE : INTER_STAR_DISTANCE)
-                    .strength(d => d.isSequential ? 1 : 0.3))
+                    .strength(link => {
+                        const source = typeof link.source === 'object' ? link.source : nodes.find(n => n.id === link.source);
+                        const target = typeof link.target === 'object' ? link.target : nodes.find(n => n.id === link.target);
+                        if (source && target) {
+                            // Strong connection from star center to its content
+                            if (source.kind === 30040 && target.kind === 30041) return STAR_LINK_STRENGTH;
+                            // Weaker connection between star centers
+                            if (source.kind === 30040 && target.kind === 30040) return INTER_STAR_LINK_STRENGTH;
+                        }
+                        return 0.5;
+                    })
+                    .distance(link => {
+                        const source = typeof link.source === 'object' ? link.source : nodes.find(n => n.id === link.source);
+                        const target = typeof link.target === 'object' ? link.target : nodes.find(n => n.id === link.target);
+                        if (source && target) {
+                            if (source.kind === 30040 && target.kind === 30041) return STAR_LINK_DISTANCE;
+                            if (source.kind === 30040 && target.kind === 30040) return INTER_STAR_DISTANCE;
+                        }
+                        return 100;
+                    }))
                 .force("charge", d3.forceManyBody()
-                    .strength(d => d.isContainer ? STAR_CENTER_CHARGE : CONTENT_NODE_CHARGE))
+                    .strength(d => d.isContainer ? STAR_CENTER_CHARGE : CONTENT_NODE_CHARGE)
+                    .distanceMax(300))
                 .force("center", d3.forceCenter(width / 2, height / 2).strength(CENTER_GRAVITY))
-                .force("collision", d3.forceCollide().radius(d => d.isContainer ? 20 : 15));
+                .force("collision", d3.forceCollide().radius(d => d.isContainer ? 20 : 15))
+                .velocityDecay(0.2)
+                .alphaDecay(0.0001)
+                .alphaMin(0.001);
         } else {
             // Linear mode - less clustering
             simulation = d3.forceSimulation(nodes)

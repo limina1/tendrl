@@ -46,7 +46,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use tera::{Context, Tera};
 use tower_http::services::ServeDir;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Shared application state
 pub struct AppState {
@@ -789,7 +789,11 @@ async fn api_feed_handler(
 /// Query parameters for network API
 #[derive(Deserialize)]
 struct NetworkQuery {
-    limit: Option<u64>,
+    limit: Option<u64>,        // Legacy: global limit (fallback)
+    limit_30040: Option<u64>,  // Limit for index events
+    limit_30041: Option<u64>,  // Limit for section events
+    limit_30023: Option<u64>,  // Limit for article events
+    limit_30818: Option<u64>,  // Limit for wiki events
     max_depth: Option<u32>,    // Recursive depth for 30040/30041 traversal (0-5, default 2)
     kinds: Option<String>,     // Comma-separated list of kinds to include
 }
@@ -801,35 +805,52 @@ async fn api_events_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<NetworkQuery>,
 ) -> Response {
-    let limit = params.limit.unwrap_or(500);
     let max_depth = params.max_depth.unwrap_or(2).min(5); // Cap at 5 to prevent runaway
     let enabled_kinds: HashSet<u64> = params.kinds
         .as_ref()
         .map(|s| s.split(',').filter_map(|k| k.trim().parse().ok()).collect())
         .unwrap_or_else(|| vec![30040, 30041].into_iter().collect());
 
-    // Build graph recursively starting from 30040 events
+    // Per-kind limits with defaults
+    let default_limit = params.limit.unwrap_or(50);
+    let mut kind_limits: HashMap<u64, u64> = HashMap::new();
+    kind_limits.insert(30040, params.limit_30040.unwrap_or(default_limit));
+    kind_limits.insert(30041, params.limit_30041.unwrap_or(default_limit));
+    kind_limits.insert(30023, params.limit_30023.unwrap_or(default_limit));
+    kind_limits.insert(30818, params.limit_30818.unwrap_or(default_limit));
+
+    // Build graph recursively
     let mut nodes: Vec<Value> = vec![];
     let mut links: Vec<Value> = vec![];
     let mut visited: HashSet<String> = HashSet::new();
     let mut a_tag_to_id: HashMap<String, String> = HashMap::new();
     let mut pubkeys: HashSet<String> = HashSet::new();
+    let mut fetched_per_kind: HashMap<u64, usize> = HashMap::new();
 
-    // Step 1: Fetch root 30040 events (publication indexes)
-    let root_filter = json!({
-        "kinds": [30040],
-        "limit": limit
-    });
+    // Step 1: Fetch events for each enabled kind with its specific limit
+    let mut all_events: Vec<Value> = vec![];
+    for kind in &enabled_kinds {
+        let limit = kind_limits.get(kind).copied().unwrap_or(default_limit);
+        let filter = json!({
+            "kinds": [kind],
+            "limit": limit
+        });
 
-    // First, get total counts for ALL publication events in nostrdb (unfiltered)
+        if let Ok(mut events) = query::query_local(&state.ndb, &[filter]) {
+            fetched_per_kind.insert(*kind, events.len());
+            all_events.append(&mut events);
+        }
+    }
+
+    // Step 2: Get total counts for ALL publication events in nostrdb (unfiltered)
     let total_filter = json!({
         "kinds": [30040, 30041, 30023, 30818],
         "limit": 10000
     });
     let mut total_counts: HashMap<u64, usize> = HashMap::new();
     let mut total_all = 0usize;
-    if let Ok(all_events) = query::query_local(&state.ndb, &[total_filter]) {
-        for event in &all_events {
+    if let Ok(all_available) = query::query_local(&state.ndb, &[total_filter]) {
+        for event in &all_available {
             if let Some(kind) = event.get("kind").and_then(|v| v.as_u64()) {
                 *total_counts.entry(kind).or_insert(0) += 1;
                 total_all += 1;
@@ -837,91 +858,191 @@ async fn api_events_handler(
         }
     }
 
-    match query::query_local(&state.ndb, &[root_filter]) {
-        Ok(root_events) => {
-            // Step 2: Recursively process each root
-            for event in root_events {
-                process_event_recursive(
-                    &state.ndb,
-                    &event,
-                    0,
-                    max_depth,
-                    &enabled_kinds,
-                    &mut nodes,
-                    &mut links,
-                    &mut visited,
-                    &mut a_tag_to_id,
-                    &mut pubkeys,
-                );
-            }
+    // Step 3: Process fetched events (with recursive expansion for 30040)
+    for event in all_events {
+        let kind = event.get("kind").and_then(|v| v.as_u64()).unwrap_or(0);
 
-            // Step 3: Fetch author profiles (kind 0) for display names
-            let mut authors: Vec<Value> = vec![];
-            for pk in &pubkeys {
-                let profile_filter = json!({
-                    "kinds": [0],
-                    "authors": [pk],
-                    "limit": 1
-                });
-                if let Ok(profiles) = query::query_local(&state.ndb, &[profile_filter]) {
-                    if let Some(profile) = profiles.into_iter().next() {
-                        let content = profile.get("content").and_then(|v| v.as_str()).unwrap_or("{}");
-                        if let Ok(meta) = serde_json::from_str::<Value>(content) {
-                            let name = meta.get("name")
-                                .or_else(|| meta.get("display_name"))
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
-                            let picture = meta.get("picture").and_then(|v| v.as_str()).map(|s| s.to_string());
-                            authors.push(json!({
-                                "pubkey": pk,
-                                "name": name,
-                                "picture": picture
-                            }));
+        // For 30040 indexes, recursively expand children
+        if kind == 30040 {
+            process_event_recursive(
+                &state.ndb,
+                event,
+                0,
+                max_depth,
+                &enabled_kinds,
+                &mut nodes,
+                &mut links,
+                &mut visited,
+                &mut a_tag_to_id,
+                &mut pubkeys,
+            );
+        } else {
+            // For other kinds, just add directly without recursion
+            if let Some(id) = event.get("id").and_then(|v| v.as_str()) {
+                if !visited.contains(id) {
+                    visited.insert(id.to_string());
+
+                    let pubkey_str = event.get("pubkey").and_then(|v| v.as_str()).unwrap_or("");
+                    if !pubkey_str.is_empty() {
+                        pubkeys.insert(pubkey_str.to_string());
+                    }
+
+                    let title = extract_tag(&event, "title")
+                        .or_else(|| extract_tag(&event, "d"))
+                        .unwrap_or_else(|| if id.len() >= 8 { id[..8].to_string() } else { id.to_string() });
+                    let content = event.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                    let content_preview = if content.len() > 200 {
+                        format!("{}...", &content[..200])
+                    } else {
+                        content.to_string()
+                    };
+
+                    nodes.push(json!({
+                        "id": id,
+                        "kind": kind,
+                        "pubkey": pubkey_str,
+                        "title": title,
+                        "depth": 0,
+                        "isContainer": false,
+                        "contentPreview": content_preview
+                    }));
+                }
+            }
+        }
+    }
+
+    // Step 3.5: Connect orphaned 30041/30818/30023 to their parent 30040 indexes
+    // This handles cases where events were fetched directly (not through recursion)
+    let node_ids: HashSet<String> = nodes.iter()
+        .filter_map(|n| n.get("id").and_then(|v| v.as_str()).map(String::from))
+        .collect();
+
+    // Build reverse lookup: child a-tag -> parent node id
+    let mut child_to_parent: HashMap<String, String> = HashMap::new();
+    for node in &nodes {
+        if let Some(kind) = node.get("kind").and_then(|v| v.as_u64()) {
+            if kind == 30040 {
+                if let Some(id) = node.get("id").and_then(|v| v.as_str()) {
+                    // Find all events referenced by this 30040's a-tags
+                    let node_filter = json!({
+                        "ids": [id],
+                        "limit": 1
+                    });
+                    if let Ok(mut parent_events) = query::query_local(&state.ndb, &[node_filter]) {
+                        if let Some(parent_event) = parent_events.pop() {
+                            for (child_kind, child_pubkey, child_d_tag) in extract_a_tags(&parent_event) {
+                                let child_key = format!("{}:{}:{}", child_kind, child_pubkey, child_d_tag);
+                                child_to_parent.insert(child_key, id.to_string());
+                            }
                         }
                     }
                 }
             }
-
-            // Count displayed nodes by kind
-            let mut displayed_counts: HashMap<u64, usize> = HashMap::new();
-            for node in &nodes {
-                if let Some(kind) = node.get("kind").and_then(|v| v.as_u64()) {
-                    *displayed_counts.entry(kind).or_insert(0) += 1;
-                }
-            }
-
-            let response = json!({
-                "nodes": nodes,
-                "links": links,
-                "authors": authors,
-                "stats": {
-                    "displayed": nodes.len(),
-                    "totalLoaded": total_all,
-                    "displayedByKind": displayed_counts,
-                    "loadedByKind": total_counts
-                }
-            });
-
-            (
-                StatusCode::OK,
-                [("content-type", "application/json")],
-                response.to_string(),
-            ).into_response()
-        }
-        Err(e) => {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                [("content-type", "application/json")],
-                json!({"error": e.to_string()}).to_string(),
-            ).into_response()
         }
     }
+
+    // Create links for orphaned children (30040, 30041, 30818, 30023)
+    for node in &nodes {
+        if let Some(kind) = node.get("kind").and_then(|v| v.as_u64()) {
+            if kind == 30040 || kind == 30041 || kind == 30818 || kind == 30023 {
+                if let (Some(child_id), Some(pubkey)) = (
+                    node.get("id").and_then(|v| v.as_str()),
+                    node.get("pubkey").and_then(|v| v.as_str()),
+                ) {
+                    // Fetch the actual event to get the d-tag
+                    let child_filter = json!({
+                        "ids": [child_id],
+                        "limit": 1
+                    });
+
+                    if let Ok(mut child_events) = query::query_local(&state.ndb, &[child_filter]) {
+                        if let Some(child_event) = child_events.pop() {
+                            let d_tag = extract_tag(&child_event, "d").unwrap_or_default();
+                            if !d_tag.is_empty() {
+                                let child_key = format!("{}:{}:{}", kind, pubkey, d_tag);
+                                if let Some(parent_id) = child_to_parent.get(&child_key) {
+                                    // Check if link already exists
+                                    let link_exists = links.iter().any(|link| {
+                                        link.get("source").and_then(|v| v.as_str()) == Some(parent_id) &&
+                                        link.get("target").and_then(|v| v.as_str()) == Some(child_id)
+                                    });
+
+                                    if !link_exists && node_ids.contains(parent_id) {
+                                        links.push(json!({
+                                            "source": parent_id,
+                                            "target": child_id,
+                                            "isSequential": true
+                                        }));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 4: Fetch author profiles (kind 0) for display names
+    let mut authors: Vec<Value> = vec![];
+    for pk in &pubkeys {
+        let profile_filter = json!({
+            "kinds": [0],
+            "authors": [pk],
+            "limit": 1
+        });
+        if let Ok(profiles) = query::query_local(&state.ndb, &[profile_filter]) {
+            if let Some(profile) = profiles.into_iter().next() {
+                let content = profile.get("content").and_then(|v| v.as_str()).unwrap_or("{}");
+                if let Ok(meta) = serde_json::from_str::<Value>(content) {
+                    let name = meta.get("name")
+                        .or_else(|| meta.get("display_name"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let picture = meta.get("picture").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    authors.push(json!({
+                        "pubkey": pk,
+                        "name": name,
+                        "picture": picture
+                    }));
+                }
+            }
+        }
+    }
+
+    // Count displayed nodes by kind
+    let mut displayed_counts: HashMap<u64, usize> = HashMap::new();
+    for node in &nodes {
+        if let Some(kind) = node.get("kind").and_then(|v| v.as_u64()) {
+            *displayed_counts.entry(kind).or_insert(0) += 1;
+        }
+    }
+
+    let response = json!({
+        "nodes": nodes,
+        "links": links,
+        "authors": authors,
+        "stats": {
+            "displayed": nodes.len(),
+            "totalLoaded": total_all,
+            "fetchedByKind": fetched_per_kind,  // Number of events fetched per kind
+            "displayedByKind": displayed_counts,
+            "loadedByKind": total_counts
+        }
+    });
+
+    (
+        StatusCode::OK,
+        [("content-type", "application/json")],
+        response.to_string(),
+    ).into_response()
 }
 
 /// Recursively process an event and its children via a-tags
+/// Only uses events already in the database (no relay fetching for performance)
 fn process_event_recursive(
     ndb: &nostrdb::Ndb,
-    event: &Value,
+    event: Value,
     depth: u32,
     max_depth: u32,
     enabled_kinds: &HashSet<u64>,
@@ -950,9 +1071,9 @@ fn process_event_recursive(
     }
 
     let pubkey = event.get("pubkey").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let d_tag = extract_tag(event, "d").unwrap_or_default();
-    let title = extract_tag(event, "title")
-        .or_else(|| extract_tag(event, "d"))
+    let d_tag = extract_tag(&event, "d").unwrap_or_default();
+    let title = extract_tag(&event, "title")
+        .or_else(|| extract_tag(&event, "d"))
         .unwrap_or_else(|| if id.len() >= 8 { id[..8].to_string() } else { id.clone() });
     let content = event.get("content").and_then(|v| v.as_str()).unwrap_or("");
     let content_preview = if content.len() > 200 {
@@ -984,14 +1105,25 @@ fn process_event_recursive(
         "contentPreview": content_preview
     }));
 
-    // If at max depth or not a container, stop recursion
-    if depth >= max_depth || !is_container {
+    // If at max depth, stop recursion
+    if depth >= max_depth {
         return;
     }
 
     // Extract children from a-tags and recurse
-    for (child_kind, child_pubkey, child_d_tag) in extract_a_tags(event) {
-        // Query for the child event
+    // Only recurse into 30040 (indexes) and 30041 (sections)
+    for (child_kind, child_pubkey, child_d_tag) in extract_a_tags(&event) {
+        // Only process publication kinds (30040 indexes and 30041 sections)
+        if child_kind != 30040 && child_kind != 30041 {
+            continue;
+        }
+
+        // Check if child is in enabled kinds
+        if !enabled_kinds.contains(&child_kind) {
+            continue;
+        }
+
+        // Check local DB only (no relay fetching for performance)
         let child_filter = json!({
             "kinds": [child_kind],
             "authors": [child_pubkey],
@@ -999,32 +1131,38 @@ fn process_event_recursive(
             "limit": 1
         });
 
-        if let Ok(children) = query::query_local(ndb, &[child_filter]) {
-            if let Some(child) = children.into_iter().next() {
-                let child_id = child.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let child_event = match query::query_local(ndb, &[child_filter]) {
+            Ok(children) => children.into_iter().next(),
+            Err(_) => None,
+        };
 
+        // Process the child if found in DB
+        if let Some(child) = child_event {
+            let child_id = child.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+            if !child_id.is_empty() && !visited.contains(&child_id) {
                 // Add link from parent to child
-                if !child_id.is_empty() {
-                    links.push(json!({
-                        "source": id,
-                        "target": child_id,
-                        "isSequential": true
-                    }));
+                links.push(json!({
+                    "source": id,
+                    "target": child_id,
+                    "isSequential": true
+                }));
 
-                    // Recurse into child
-                    process_event_recursive(
-                        ndb,
-                        &child,
-                        depth + 1,
-                        max_depth,
-                        enabled_kinds,
-                        nodes,
-                        links,
-                        visited,
-                        a_tag_to_id,
-                        pubkeys,
-                    );
-                }
+                // Recurse into child
+                // For 30040 (indexes), continue recursing up to max_depth
+                // For 30041 (sections), they're leaf nodes but we still process them
+                process_event_recursive(
+                    ndb,
+                    child,  // Pass by value
+                    depth + 1,
+                    max_depth,
+                    enabled_kinds,
+                    nodes,
+                    links,
+                    visited,
+                    a_tag_to_id,
+                    pubkeys,
+                );
             }
         }
     }
