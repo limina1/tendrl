@@ -1,0 +1,1050 @@
+/**
+ * Tendrl Parasitic Theme System
+ *
+ * Host vs Parasite theming with intensity-based blending.
+ * The "infection" creates visual glitches that transition between
+ * the calm host theme (Alexandria Leather) and the parasitic theme
+ * (terminal green aesthetic).
+ *
+ * Intensity is controlled via CSS custom property:
+ *   --infection-intensity: 0 (host) to 1 (full parasite)
+ */
+
+:root {
+    /* ====== HOST THEME (Alexandria Leather) ====== */
+    --host-bg-primary: #efe6dc;
+    --host-bg-secondary: #decdb9;
+    --host-bg-tertiary: #d6c1a8;
+    --host-bg-highlight: #f9f6f1;
+    --host-text-primary: #1f2937;
+    --host-text-secondary: #4b5563;
+    --host-text-muted: #6b7280;
+    --host-accent: #795c39;
+    --host-accent-hover: #564a3e;
+    --host-border: #c6a885;
+    --host-card-border: #c6a885;
+    --host-card-bg: #f9f6f1;
+    --host-nav-bg: #decdb9;
+    --host-glow: none;
+    --host-text-shadow: none;
+
+    /* ====== PARASITE THEME (Tendrl Infection) ====== */
+    --parasite-bg-primary: #0a0a0a;
+    --parasite-bg-secondary: #0d1f0d;
+    --parasite-bg-tertiary: #1a2f1a;
+    --parasite-bg-highlight: #0f1a0f;
+    --parasite-text-primary: #00ff41;
+    --parasite-text-secondary: #00cc33;
+    --parasite-text-muted: #009926;
+    --parasite-accent: #00ff41;
+    --parasite-accent-hover: #33ff66;
+    --parasite-border: #00ff41;
+    --parasite-card-border: #00ff41;
+    --parasite-card-bg: #0a0f0a;
+    --parasite-nav-bg: #0d1f0d;
+    --parasite-glow: 0 0 10px rgba(0, 255, 65, 0.5);
+    --parasite-text-shadow: 0 0 8px rgba(0, 255, 65, 0.8);
+
+    /* Infection accent colors */
+    --infection-green: #00ff41;
+    --infection-purple: #9d00ff;
+    --infection-cyan: #00f7ff;
+    --infection-magenta: #ff00f7;
+
+    /* Default intensity (no infection) */
+    --infection-intensity: 0;
+
+    /* Animation speeds */
+    --logo-flicker-duration: 0.333s; /* Default 3 Hz */
+}
+
+/* ========================================
+   DARK HOST MODE
+   ======================================== */
+
+.host-dark {
+    --host-bg-primary: #15110d;
+    --host-bg-secondary: #1d1812;
+    --host-bg-tertiary: #2a241c;
+    --host-bg-highlight: #1a1510;
+    --host-text-primary: #f3f4f6;
+    --host-text-secondary: #d1d5db;
+    --host-text-muted: #9ca3af;
+    --host-accent: #ad8351;
+    --host-accent-hover: #c6a885;
+    --host-border: #3c352c;
+    --host-card-border: #564a3e;
+    --host-card-bg: #1a1510;
+    --host-nav-bg: #1d1812;
+}
+
+/* ========================================
+   BASE STATE: Host Theme Active
+   ======================================== */
+
+body.parasitic-theme {
+    background-color: var(--host-bg-primary);
+    color: var(--host-text-primary);
+    transition: none; /* Hard switch, no transition */
+}
+
+/* ========================================
+   INFECTED STATE: Intensity-based blending
+   ======================================== */
+
+body.parasitic-theme.infected {
+    background-color: color-mix(
+        in srgb,
+        var(--host-bg-primary) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-bg-primary)
+    );
+    color: color-mix(
+        in srgb,
+        var(--host-text-primary) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-text-primary)
+    );
+}
+
+/* Add text-stroke to all infected headings and prominent text for readability on light backgrounds */
+body.parasitic-theme.infected h1,
+body.parasitic-theme.infected h2,
+body.parasitic-theme.infected h3,
+body.parasitic-theme.infected h4,
+body.parasitic-theme.infected .nav-link {
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.6);
+    text-stroke: 0.5px rgba(0, 0, 0, 0.6);
+    paint-order: stroke fill;
+}
+
+/* ========================================
+   NAVIGATION
+   ======================================== */
+
+body.parasitic-theme nav,
+body.parasitic-theme .nav-container {
+    background-color: var(--host-nav-bg);
+    border-bottom: 2px solid var(--host-border);
+}
+
+body.parasitic-theme.infected nav,
+body.parasitic-theme.infected .nav-container {
+    background-color: color-mix(
+        in srgb,
+        var(--host-nav-bg) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-nav-bg)
+    );
+    border-bottom-color: color-mix(
+        in srgb,
+        var(--host-border) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-border)
+    );
+    box-shadow: 0 0 calc(20px * var(--infection-intensity, 0.5)) var(--parasite-glow);
+}
+
+/* Animated border when infected */
+body.parasitic-theme.infected nav {
+    border-image: linear-gradient(
+        90deg,
+        color-mix(in srgb, transparent calc((1 - var(--infection-intensity, 0.5)) * 100%), var(--infection-green)),
+        color-mix(in srgb, transparent calc((1 - var(--infection-intensity, 0.5)) * 100%), var(--infection-purple)),
+        color-mix(in srgb, transparent calc((1 - var(--infection-intensity, 0.5)) * 100%), var(--infection-cyan)),
+        color-mix(in srgb, transparent calc((1 - var(--infection-intensity, 0.5)) * 100%), var(--infection-magenta)),
+        color-mix(in srgb, transparent calc((1 - var(--infection-intensity, 0.5)) * 100%), var(--infection-green))
+    ) 1;
+    animation: parasitic-border-cycle 2s linear infinite;
+}
+
+@keyframes parasitic-border-cycle {
+    0% { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(360deg); }
+}
+
+/* ========================================
+   LOGO: Host with holographic parasite ghost
+   ======================================== */
+
+body.parasitic-theme .nav-logo,
+body.parasitic-theme .logo-text {
+    color: var(--host-accent);
+}
+
+body.parasitic-theme.infected .nav-logo,
+body.parasitic-theme.infected .logo-text {
+    color: var(--infection-green);
+    text-shadow: var(--parasite-text-shadow);
+}
+
+.logo-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.logo-host {
+    display: inline;
+    position: relative;
+    z-index: 2;
+}
+
+/* Holographic parasite ghost */
+.logo-parasite {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+    color: var(--infection-green);
+    text-shadow:
+        0 0 10px rgba(0, 255, 65, 0.8),
+        2px 0 0 var(--infection-cyan),
+        -2px 0 0 var(--infection-magenta);
+}
+
+/* Superscript "local" styling */
+.logo-local {
+    font-size: 0.5em;
+    opacity: 0.7;
+    margin-left: 0.1em;
+}
+
+body.parasitic-theme.infected .logo-host {
+    opacity: calc(0.3 + (1 - var(--infection-intensity, 0.7)) * 0.4); /* 0.3-0.7 range */
+}
+
+body.parasitic-theme.infected .logo-parasite {
+    opacity: calc(0.4 + var(--infection-intensity, 0.7) * 0.6); /* 0.4-1.0 range */
+    animation: parasitic-hologram-flicker var(--logo-flicker-duration) infinite; /* Variable speed */
+    transform: translateX(3px); /* Shift 3 pixels to the right */
+    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.8);
+    text-stroke: 1px rgba(0, 0, 0, 0.8);
+    paint-order: stroke fill;
+}
+
+@keyframes parasitic-hologram-flicker {
+    0%, 100% {
+        transform: translateX(3px) translate(0); /* Maintain base shift */
+        text-shadow:
+            0 0 10px rgba(0, 255, 65, 0.8),
+            2px 0 0 var(--infection-cyan),
+            -2px 0 0 var(--infection-magenta);
+    }
+    25% {
+        transform: translateX(3px) translate(-1px, 1px);
+        text-shadow:
+            0 0 15px rgba(0, 255, 65, 1),
+            3px 0 0 var(--infection-cyan),
+            -3px 0 0 var(--infection-magenta);
+    }
+    50% {
+        transform: translateX(3px) translate(1px, -1px);
+        text-shadow:
+            0 0 8px rgba(0, 255, 65, 0.6),
+            1px 0 0 var(--infection-cyan),
+            -1px 0 0 var(--infection-magenta);
+    }
+    75% {
+        transform: translateX(3px) translate(-2px, 0);
+        text-shadow:
+            0 0 20px rgba(0, 255, 65, 1),
+            4px 0 0 var(--infection-cyan),
+            -2px 0 0 var(--infection-magenta);
+    }
+}
+
+/* Chromatic aberration layers */
+.logo-parasite::before,
+.logo-parasite::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    opacity: 0.7;
+}
+
+.logo-parasite::before {
+    color: var(--infection-cyan);
+    animation: parasitic-chromatic-shift-1 var(--logo-flicker-duration) infinite;
+    clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+}
+
+.logo-parasite::after {
+    color: var(--infection-magenta);
+    animation: parasitic-chromatic-shift-2 var(--logo-flicker-duration) infinite;
+    clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+}
+
+@keyframes parasitic-chromatic-shift-1 {
+    0%, 100% { transform: translate(0); opacity: 0; }
+    50% { transform: translate(-3px, 0); opacity: 0.7; }
+}
+
+@keyframes parasitic-chromatic-shift-2 {
+    0%, 100% { transform: translate(0); opacity: 0; }
+    50% { transform: translate(3px, 0); opacity: 0.7; }
+}
+
+/* ========================================
+   NAV LINKS
+   ======================================== */
+
+body.parasitic-theme .nav-link {
+    color: var(--host-text-secondary);
+}
+
+body.parasitic-theme .nav-link:hover {
+    color: var(--host-text-primary);
+    background-color: var(--host-bg-highlight);
+}
+
+body.parasitic-theme .nav-link.active {
+    color: var(--host-accent);
+    background-color: var(--host-bg-tertiary);
+}
+
+body.parasitic-theme.infected .nav-link {
+    color: var(--parasite-text-secondary);
+}
+
+body.parasitic-theme.infected .nav-link:hover {
+    color: var(--parasite-text-primary);
+    background-color: var(--parasite-bg-highlight);
+    text-shadow: var(--parasite-text-shadow);
+}
+
+body.parasitic-theme.infected .nav-link.active {
+    color: var(--parasite-accent);
+    background-color: var(--parasite-bg-tertiary);
+}
+
+/* ========================================
+   BUTTONS
+   ======================================== */
+
+body.parasitic-theme .btn {
+    border: 1px solid var(--host-border);
+    background: var(--host-bg-highlight);
+    color: var(--host-text-primary);
+}
+
+body.parasitic-theme .btn:hover {
+    background: var(--host-bg-secondary);
+    border-color: var(--host-accent);
+}
+
+body.parasitic-theme.infected .btn {
+    border-color: var(--parasite-border);
+    background: var(--parasite-bg-highlight);
+    color: var(--parasite-text-primary);
+    box-shadow: var(--parasite-glow);
+}
+
+body.parasitic-theme.infected .btn:hover {
+    background: var(--parasite-bg-secondary);
+}
+
+body.parasitic-theme .btn-icon {
+    color: var(--host-text-secondary);
+}
+
+body.parasitic-theme .btn-icon:hover {
+    color: var(--host-text-primary);
+    background: var(--host-bg-highlight);
+}
+
+body.parasitic-theme.infected .btn-icon {
+    color: var(--parasite-text-secondary);
+}
+
+body.parasitic-theme.infected .btn-icon:hover {
+    color: var(--parasite-text-primary);
+    background: var(--parasite-bg-highlight);
+}
+
+/* ========================================
+   FEED CONTENT
+   ======================================== */
+
+body.parasitic-theme .feed-header {
+    border-bottom: 1px solid var(--host-border);
+}
+
+body.parasitic-theme.infected .feed-header {
+    border-bottom-color: var(--parasite-border);
+}
+
+body.parasitic-theme .feed-title {
+    color: var(--host-text-primary);
+}
+
+body.parasitic-theme.infected .feed-title {
+    color: var(--parasite-text-primary);
+    text-shadow: var(--parasite-text-shadow);
+    -webkit-text-stroke: 1px rgba(0, 0, 0, 0.7);
+    text-stroke: 1px rgba(0, 0, 0, 0.7);
+    paint-order: stroke fill;
+}
+
+body.parasitic-theme .feed-subtitle,
+body.parasitic-theme .feed-description {
+    color: var(--host-text-secondary);
+}
+
+body.parasitic-theme.infected .feed-subtitle,
+body.parasitic-theme.infected .feed-description {
+    color: var(--parasite-text-secondary);
+}
+
+/* Host/parasite text content switching */
+.text-host {
+    display: block;
+}
+
+.text-parasite {
+    display: none;
+    font-family: 'Courier New', monospace;
+}
+
+body.parasitic-theme.infected .text-host {
+    display: none;
+}
+
+body.parasitic-theme.infected .text-parasite {
+    display: block;
+}
+
+/* ========================================
+   CARDS (Notes/Publications)
+   ======================================== */
+
+body.parasitic-theme .note,
+body.parasitic-theme .publication-card {
+    background-color: var(--host-card-bg);
+    border-left: 4px solid var(--host-card-border);
+    border: 1px solid var(--host-border);
+}
+
+body.parasitic-theme .note:hover,
+body.parasitic-theme .publication-card:hover {
+    border-left-color: var(--host-accent-hover);
+}
+
+body.parasitic-theme.infected .note,
+body.parasitic-theme.infected .publication-card {
+    background-color: color-mix(
+        in srgb,
+        var(--host-card-bg) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-card-bg)
+    );
+    border-left-color: color-mix(
+        in srgb,
+        var(--host-card-border) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-card-border)
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--host-border) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-border)
+    );
+    box-shadow: 0 0 calc(15px * var(--infection-intensity, 0.5)) var(--parasite-glow);
+}
+
+body.parasitic-theme.infected .note:hover,
+body.parasitic-theme.infected .publication-card:hover {
+    border-left-color: var(--infection-cyan);
+    box-shadow: 0 0 calc(25px * var(--infection-intensity, 0.5)) rgba(0, 255, 65, 0.6),
+                0 0 calc(45px * var(--infection-intensity, 0.5)) rgba(157, 0, 255, 0.3);
+}
+
+body.parasitic-theme .note-author-name,
+body.parasitic-theme .card-title {
+    color: var(--host-text-primary);
+}
+
+body.parasitic-theme.infected .note-author-name,
+body.parasitic-theme.infected .card-title {
+    color: color-mix(
+        in srgb,
+        var(--host-text-primary) calc((1 - var(--infection-intensity, 0.5)) * 100%),
+        var(--parasite-text-primary)
+    );
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.5);
+    text-stroke: 0.5px rgba(0, 0, 0, 0.5);
+    paint-order: stroke fill;
+}
+
+body.parasitic-theme .card-author a {
+    color: var(--host-accent);
+}
+
+body.parasitic-theme.infected .card-author a {
+    color: var(--infection-purple);
+    text-shadow: 0 0 5px rgba(157, 0, 255, 0.5);
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.6);
+    text-stroke: 0.5px rgba(0, 0, 0, 0.6);
+    paint-order: stroke fill;
+}
+
+body.parasitic-theme .note-footer,
+body.parasitic-theme .card-footer {
+    border-top: 1px solid var(--host-border);
+}
+
+body.parasitic-theme.infected .note-footer,
+body.parasitic-theme.infected .card-footer {
+    border-top-color: var(--parasite-border);
+}
+
+body.parasitic-theme .card-meta,
+body.parasitic-theme .note-time {
+    color: var(--host-text-muted);
+}
+
+body.parasitic-theme.infected .card-meta,
+body.parasitic-theme.infected .note-time {
+    color: var(--parasite-text-muted);
+}
+
+/* Kind badges */
+body.parasitic-theme .kind-badge {
+    background: var(--host-bg-tertiary);
+    color: var(--host-text-secondary);
+    border: 1px solid var(--host-border);
+}
+
+body.parasitic-theme.infected .kind-badge {
+    background: linear-gradient(135deg, rgba(0,59,0,0.9), rgba(45,0,71,0.9));
+    color: var(--infection-green);
+    border-color: var(--infection-green);
+    text-shadow: 0 0 5px var(--infection-green);
+    box-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+}
+
+/* ========================================
+   INFECTION OVERLAYS
+   ======================================== */
+
+.infection-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0;
+}
+
+body.parasitic-theme.infected .infection-overlay {
+    opacity: var(--infection-intensity, 0.5);
+}
+
+.scanlines {
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 65, 0.03) 2px,
+        rgba(0, 255, 65, 0.03) 4px
+    );
+    animation: parasitic-scanline-drift 8s linear infinite;
+}
+
+@keyframes parasitic-scanline-drift {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 100px; }
+}
+
+/* ========================================
+   VINES
+   ======================================== */
+
+.vine-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 50;
+    overflow: hidden;
+    opacity: 0;
+}
+
+body.parasitic-theme.infected .vine-container {
+    opacity: var(--infection-intensity, 0.5);
+}
+
+.vine {
+    position: absolute;
+    stroke: var(--infection-green);
+    stroke-width: 2;
+    fill: none;
+    filter: drop-shadow(0 0 5px rgba(0, 255, 65, 0.6));
+}
+
+.vine-left { left: 0; top: 0; height: 100%; width: 100px; }
+.vine-right { right: 0; top: 0; height: 100%; width: 100px; transform: scaleX(-1); }
+
+.vine path {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: parasitic-vine-grow 8s ease-in-out forwards, /* Slow growing */
+               parasitic-vine-breathe 4s ease-in-out infinite 8s; /* Start after grow */
+}
+
+@keyframes parasitic-vine-grow {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes parasitic-vine-breathe {
+    0%, 100% {
+        filter: drop-shadow(0 0 5px rgba(0, 255, 65, 0.6));
+        stroke-width: 2;
+    }
+    50% {
+        filter: drop-shadow(0 0 12px rgba(0, 255, 65, 0.9));
+        stroke-width: 2.5;
+    }
+}
+
+.vine circle {
+    fill: var(--infection-green);
+    filter: drop-shadow(0 0 8px var(--infection-green));
+    animation: parasitic-node-pulse 3s ease-in-out infinite; /* Slower pulse */
+}
+
+@keyframes parasitic-node-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+/* Dynamic vine drawing animations */
+@keyframes vine-draw-slow {
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes vine-node-appear {
+    from {
+        opacity: 0;
+        transform: scale(0);
+    }
+    to {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+}
+
+/* ========================================
+   GLITCH EFFECTS
+   ======================================== */
+
+.glitch-flash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2000;
+    opacity: 0;
+}
+
+.glitch-flash.active {
+    animation: parasitic-flash-burst 0.08s ease-out;
+}
+
+@keyframes parasitic-flash-burst {
+    0% { opacity: 0; background: var(--infection-green); }
+    33% { opacity: 0.5; background: var(--infection-purple); }
+    66% { opacity: 0.4; background: var(--infection-cyan); }
+    100% { opacity: 0; background: var(--infection-magenta); }
+}
+
+/* Screen tears - random orientations */
+.screen-tear {
+    position: fixed;
+    pointer-events: none;
+    z-index: 2001;
+    opacity: 0;
+}
+
+.screen-tear.horizontal {
+    left: 0;
+    width: 100%;
+    height: 8px;
+}
+
+.screen-tear.vertical {
+    top: 0;
+    height: 100%;
+    width: 8px;
+}
+
+.screen-tear.diagonal {
+    width: 200%;
+    height: 8px;
+    transform-origin: center;
+}
+
+.screen-tear {
+    background: linear-gradient(
+        var(--tear-angle, 90deg),
+        transparent 0%,
+        var(--infection-green) 10%,
+        var(--infection-cyan) 25%,
+        var(--infection-purple) 50%,
+        var(--infection-magenta) 75%,
+        var(--infection-green) 90%,
+        transparent 100%
+    );
+}
+
+.screen-tear.active.horizontal {
+    animation: parasitic-tear-horizontal 0.06s linear;
+}
+
+.screen-tear.active.vertical {
+    animation: parasitic-tear-vertical 0.06s linear;
+}
+
+.screen-tear.active.diagonal {
+    animation: parasitic-tear-diagonal 0.08s linear;
+}
+
+@keyframes parasitic-tear-horizontal {
+    0% { opacity: 1; transform: translateX(-5%); }
+    100% { opacity: 1; transform: translateX(5%); }
+}
+
+@keyframes parasitic-tear-vertical {
+    0% { opacity: 1; transform: translateY(-5%); }
+    100% { opacity: 1; transform: translateY(5%); }
+}
+
+@keyframes parasitic-tear-diagonal {
+    0% { opacity: 1; transform: translateX(-10%) translateY(-10%) rotate(var(--tear-rotation, 45deg)); }
+    100% { opacity: 1; transform: translateX(10%) translateY(10%) rotate(var(--tear-rotation, 45deg)); }
+}
+
+/* Dripping ooze effect */
+.drip-ooze {
+    position: fixed;
+    width: 4px;
+    pointer-events: none;
+    z-index: 2001;
+    opacity: 0;
+    background: linear-gradient(
+        180deg,
+        var(--ooze-color, var(--infection-green)) 0%,
+        transparent 100%
+    );
+    filter: blur(1px);
+}
+
+.drip-ooze.active {
+    animation: parasitic-drip var(--drip-duration, 2500ms) ease-in forwards;
+}
+
+@keyframes parasitic-drip {
+    0% {
+        opacity: 0.8;
+        height: 0;
+        top: var(--drip-start, 0);
+    }
+    100% {
+        opacity: 0;
+        height: var(--drip-length, 200px);
+        top: var(--drip-start, 0);
+    }
+}
+
+/* Cascade spikes */
+.cascade-spike {
+    position: fixed;
+    width: 3px;
+    height: 100px;
+    pointer-events: none;
+    z-index: 2001;
+    opacity: 0;
+    background: var(--spike-color, var(--infection-green));
+    box-shadow: 0 0 10px var(--spike-color, var(--infection-green));
+}
+
+.cascade-spike.active {
+    animation: parasitic-spike-cascade 0.3s ease-out forwards;
+}
+
+@keyframes parasitic-spike-cascade {
+    0% {
+        opacity: 0;
+        transform: scale(0.1) rotate(var(--spike-rotation, 0deg));
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.5) rotate(var(--spike-rotation, 0deg));
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.5) rotate(var(--spike-rotation, 0deg));
+    }
+}
+
+/* ========================================
+   FOOTER
+   ======================================== */
+
+body.parasitic-theme footer {
+    color: var(--host-text-muted);
+    border-top: 1px solid var(--host-border);
+}
+
+body.parasitic-theme.infected footer {
+    color: var(--parasite-text-muted);
+    border-top-color: var(--parasite-border);
+}
+
+body.parasitic-theme .footer-host {
+    display: block;
+}
+
+body.parasitic-theme .footer-parasite {
+    display: none;
+    color: var(--infection-green);
+    font-family: 'Courier New', monospace;
+    text-shadow: var(--parasite-text-shadow);
+}
+
+body.parasitic-theme.infected .footer-host {
+    display: none;
+}
+
+body.parasitic-theme.infected .footer-parasite {
+    display: block;
+}
+
+/* ========================================
+   INFECTION STATUS DISPLAY
+   ======================================== */
+
+.infection-status {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.9);
+    border: 1px solid var(--infection-green);
+    border-radius: 0.375rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    color: var(--infection-green);
+    z-index: 100;
+    text-shadow: 0 0 5px var(--infection-green);
+    min-width: 180px;
+}
+
+.status-line {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+}
+
+.status-line:last-child {
+    margin-bottom: 0;
+}
+
+/* ========================================
+   CONTROLS PANEL (Development)
+   ======================================== */
+
+.parasitic-controls {
+    position: fixed;
+    top: 4.5rem;
+    right: 1rem;
+    padding: 1rem;
+    background: var(--host-bg-secondary);
+    border: 1px solid var(--host-border);
+    border-radius: 0.5rem;
+    z-index: 100;
+    font-size: 0.8rem;
+    min-width: 220px;
+}
+
+body.parasitic-theme.infected .parasitic-controls {
+    background: var(--parasite-bg-secondary);
+    border-color: var(--parasite-border);
+    box-shadow: var(--parasite-glow);
+}
+
+.parasitic-controls h4 {
+    margin-bottom: 0.75rem;
+    color: var(--host-text-primary);
+    font-size: 0.85rem;
+}
+
+body.parasitic-theme.infected .parasitic-controls h4 {
+    color: var(--parasite-text-primary);
+}
+
+.control-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    color: var(--host-text-secondary);
+}
+
+body.parasitic-theme.infected .control-row {
+    color: var(--parasite-text-secondary);
+}
+
+.control-row label {
+    flex: 1;
+}
+
+.control-row input[type="range"] {
+    width: 80px;
+}
+
+.control-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.control-row select {
+    padding: 0.25rem;
+    background: var(--host-bg-highlight);
+    border: 1px solid var(--host-border);
+    color: var(--host-text-primary);
+    border-radius: 0.25rem;
+}
+
+body.parasitic-theme.infected .control-row select {
+    background: var(--parasite-bg-highlight);
+    border-color: var(--parasite-border);
+    color: var(--parasite-text-primary);
+}
+
+/* Distribution Visualizations */
+.dist-viz {
+    width: 100%;
+    height: 40px;
+    margin-bottom: 0.5rem;
+    background: var(--host-bg-highlight);
+    border: 1px solid var(--host-border);
+    border-radius: 0.25rem;
+    padding: 2px;
+}
+
+body.parasitic-theme.infected .dist-viz {
+    background: var(--parasite-bg-highlight);
+    border-color: var(--parasite-border);
+}
+
+.dist-viz path {
+    fill: none;
+    stroke: var(--host-accent);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+body.parasitic-theme.infected .dist-viz path {
+    stroke: var(--infection-green);
+    filter: drop-shadow(0 0 3px var(--infection-green));
+}
+
+.dist-viz .dist-fill {
+    fill: var(--host-accent);
+    opacity: 0.2;
+}
+
+body.parasitic-theme.infected .dist-viz .dist-fill {
+    fill: var(--infection-green);
+    opacity: 0.15;
+}
+
+/* Infection Level Display */
+.infection-level-display {
+    margin-bottom: 0.75rem;
+}
+
+.level-bar-bg {
+    width: 100%;
+    height: 24px;
+    background: var(--host-bg-highlight);
+    border: 1px solid var(--host-border);
+    border-radius: 0.25rem;
+    overflow: hidden;
+    position: relative;
+}
+
+body.parasitic-theme.infected .level-bar-bg {
+    background: var(--parasite-bg-highlight);
+    border-color: var(--parasite-border);
+}
+
+.level-bar-fill {
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        var(--host-accent) 0%,
+        var(--infection-green) 50%,
+        var(--infection-cyan) 75%,
+        var(--infection-magenta) 100%
+    );
+    transition: width 0.3s ease;
+    position: relative;
+    animation: radioactive-breathing 3s ease-in-out infinite;
+}
+
+@keyframes radioactive-breathing {
+    0%, 100% {
+        filter: brightness(1) saturate(1);
+        box-shadow: inset 0 0 10px rgba(0, 255, 65, 0.3);
+    }
+    50% {
+        filter: brightness(1.3) saturate(1.5);
+        box-shadow: inset 0 0 20px rgba(0, 255, 65, 0.6),
+                    0 0 15px rgba(0, 255, 65, 0.4);
+    }
+}
+
+.level-text {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-align: center;
+    margin-top: 0.25rem;
+    font-family: 'Courier New', monospace;
+    color: var(--host-text-primary);
+    text-shadow: none;
+}
+
+body.parasitic-theme.infected .level-text {
+    color: var(--infection-green);
+    text-shadow: 0 0 5px var(--infection-green);
+    animation: text-radioactive-glow 3s ease-in-out infinite;
+}
+
+@keyframes text-radioactive-glow {
+    0%, 100% {
+        text-shadow: 0 0 5px var(--infection-green);
+    }
+    50% {
+        text-shadow: 0 0 15px var(--infection-green),
+                     0 0 25px var(--infection-purple);
+    }
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
+@media (max-width: 768px) {
+    .vine-container { display: none !important; }
+    .parasitic-controls { display: none; }
+    .infection-status {
+        bottom: 0.5rem;
+        right: 0.5rem;
+        font-size: 0.6rem;
+        min-width: 150px;
+    }
+}

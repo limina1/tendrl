@@ -1,0 +1,46 @@
+[workspace]
+members = ["tendrl_ws", "enostr", "tokenator"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# Core dependencies
+nostrdb = { git = "https://github.com/damus-io/nostrdb-rs", rev = "2b2e5e43c019b80b98f1db6a03a1b88ca699bfa3" }
+enostr = { path = "enostr" }
+nostr = { version = "0.37.0", default-features = false, features = ["std", "nip49"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+serde_derive = "1"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Async
+tokio = { version = "1.16", features = ["macros", "rt-multi-thread"] }
+futures = "0.3"
+
+# HTTP client for NIP-11
+reqwest = { version = "0.12", features = ["json"] }
+
+# Logging
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+hex = { version = "0.4", features = ["serde"] }
+bech32 = { version = "0.11", default-features = false }
+url = "2.5.2"
+hashbrown = "0.15.2"
+mio = { version = "1.0.3", features = ["os-poll", "net"] }
+ewebsock = { version = "0.8.0", features = ["tls"] }
+
+# Tokenator (from Notedeck)
+tokenator = { path = "tokenator" }

@@ -1,0 +1,51 @@
+[package]
+name = "tendrl_ws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tendrl web server - serves publications from nostrdb with Jinja-style templates"
+
+[[bin]]
+name = "tendrl_ws"
+path = "src/main.rs"
+
+[dependencies]
+# Core Tendrl dependencies
+nostrdb = { workspace = true }
+enostr = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["net", "sync", "rt-multi-thread", "macros"] }
+futures = { workspace = true }
+
+# HTTP server
+axum = "0.7"
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+
+# Templating (Jinja2-style)
+tera = "1.19"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+hex = { workspace = true }
+chrono = "0.4"
+
+# Configuration
+toml = "0.8"
+
+# WebSocket client for relay fetching
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+
+# Nostr protocol (for bech32 naddr encoding/decoding)
+nostr = "0.37"

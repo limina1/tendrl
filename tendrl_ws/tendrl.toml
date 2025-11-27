@@ -1,0 +1,228 @@
+# Tendrl Configuration
+# Config-driven feed system using nostrdb as source of truth
+#
+# Relation types:
+#   - author: Fetch author profile (kind 0) by pubkey
+#   - e_tag: Fetch events referencing this event via 'e' tag
+#   - a_tag: Fetch events referencing this addressable event via 'a' tag
+#   - a_tag_children: Fetch addressable events listed IN this event's 'a' tags
+#
+# Modes:
+#   - aggregate: Return stats only (count, by_content, total_sats)
+#   - expanded: Return full enriched events
+#   - tree: Build hierarchical structure
+#   - single: Return first matching event
+
+[global]
+# nostrdb is always the source of truth - no separate db_dir needed
+template_dir = "templates"
+default_limit = 50
+
+# Default relays for fetching
+default_relays = [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.nostr.band",
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com"
+]
+
+# ===========================================================================
+# Publications Feed (NKBIP-01)
+# Kind 30040 = publications (containers, can nest)
+# Kind 30041 = sections (content)
+# ===========================================================================
+
+[feed.publications]
+name = "publications"
+description = "Long-form publications with structured sections"
+display_kinds = [30040]
+fetch_on_startup = true
+refresh_interval = 300  # 5 minutes
+
+# Publication-specific relays (Alexandria ecosystem)
+relays = [
+    "wss://theforest.nostr1.com",
+    "wss://thecitadel.nostr1.com",
+    "wss://relay.damus.io"
+]
+
+[feed.publications.root]
+kind = 30040
+template = "publication-card.html"
+
+# Author profile
+[feed.publications.root.deps.author]
+kind = 0
+relation = "author"
+required = false
+
+# Sections listed IN the publication's a-tags (NKBIP-01 structure)
+[feed.publications.root.deps.sections]
+kind = 30041
+relation = "a_tag_children"
+mode = "expanded"
+fetch_on_demand = true  # Fetch from relay when viewing publication
+required = false
+
+# Sub-publications (nested containers)
+[feed.publications.root.deps.sub_publications]
+kind = 30040
+relation = "a_tag_children"
+mode = "tree"
+max_depth = 3
+required = false
+
+# Engagement: reactions on the publication
+[feed.publications.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+# Engagement: zaps
+[feed.publications.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+# Engagement: replies/comments
+[feed.publications.root.deps.replies]
+kind = 1
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+expandable = true
+
+# ===========================================================================
+# Timeline Feed (Notes)
+# ===========================================================================
+
+[feed.timeline]
+name = "timeline"
+description = "Short notes from followed users"
+display_kinds = [1, 6]  # notes and reposts
+fetch_on_startup = false
+refresh_interval = 30
+
+[feed.timeline.root]
+kind = 1
+
+[feed.timeline.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.timeline.root.deps.reactions]
+kind = 7
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.timeline.root.deps.replies]
+kind = 1
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+[feed.timeline.root.deps.zaps]
+kind = 9735
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]
+
+[feed.timeline.root.deps.reposts]
+kind = 6
+relation = "e_tag"
+mode = "aggregate"
+stats = ["count"]
+
+# ===========================================================================
+# Zaps Feed
+# ===========================================================================
+
+[feed.zaps]
+name = "zaps"
+description = "Lightning zap receipts"
+display_kinds = [9735]
+fetch_on_startup = false
+refresh_interval = 60
+
+[feed.zaps.root]
+kind = 9735
+template = "zap-card.html"
+
+# Sender profile (extracted from bolt11/description)
+[feed.zaps.root.deps.sender]
+kind = 0
+relation = "sender"
+required = true
+
+# Recipient profile
+[feed.zaps.root.deps.recipient]
+kind = 0
+relation = "author"
+required = true
+
+# Event being zapped
+[feed.zaps.root.deps.target_event]
+relation = "e_tag"
+fetch_any_kind = true
+required = false
+
+# ===========================================================================
+# Wiki Feed (NIP-54)
+# ===========================================================================
+
+[feed.wiki]
+name = "wiki"
+description = "Wiki pages and collaborative knowledge"
+display_kinds = [30818]
+fetch_on_startup = false
+
+[feed.wiki.root]
+kind = 30818
+template = "wiki-card.html"
+
+[feed.wiki.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.wiki.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count"]
+
+# ===========================================================================
+# Long-form Articles (NIP-23)
+# ===========================================================================
+
+[feed.articles]
+name = "articles"
+description = "Long-form blog posts and articles"
+display_kinds = [30023]
+fetch_on_startup = false
+
+[feed.articles.root]
+kind = 30023
+template = "article-card.html"
+
+[feed.articles.root.deps.author]
+kind = 0
+relation = "author"
+required = true
+
+[feed.articles.root.deps.reactions]
+kind = 7
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "by_content"]
+
+[feed.articles.root.deps.zaps]
+kind = 9735
+relation = "a_tag"
+mode = "aggregate"
+stats = ["count", "total_sats"]

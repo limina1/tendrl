@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Publications - Tendrl{% endblock %}
+
+{% block content %}
+<div class="feed-container">
+    <!-- Feed Header -->
+    <div class="feed-header">
+        <div class="feed-header-inner">
+            <div>
+                <h1 class="feed-title">Publications</h1>
+                <p class="feed-subtitle">Showing {{ displayed_count }} of {{ total_count }} publications (kind 30040)</p>
+            </div>
+            <div class="feed-controls">
+                <!-- Sort -->
+                <select id="sort-order" class="btn">
+                    <option value="recent" {% if sort == "recent" %}selected{% endif %}>Most Recent</option>
+                    <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest First</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Publication Grid -->
+    <div class="feed-grid">
+        {% for pub in publications %}
+        <article class="publication-card"
+                 data-event='{{ pub.event_json | safe }}'
+                 onclick="window.location.href='/publication/{{ pub.url_type }}/{{ pub.url_identifier }}'">
+            <!-- Card Image -->
+            <div class="card-image">
+                {% if pub.image %}
+                <img src="{{ pub.image }}" alt="{% if pub.title %}{{ pub.title }}{% else %}Publication{% endif %}" loading="lazy">
+                {% else %}
+                <div class="card-image-placeholder"></div>
+                {% endif %}
+            </div>
+
+            <!-- Card Content -->
+            <div class="card-content">
+                <a href="/publication/{{ pub.url_type }}/{{ pub.url_identifier }}" class="card-title">
+                    {% if pub.title %}{{ pub.title }}{% else %}Untitled Publication{% endif %}
+                </a>
+                <div class="card-author">
+                    by {% if pub.author_name %}<a href="/profile/{{ pub.pubkey }}">{{ pub.author_name }}</a>{% else %}{{ pub.pubkey | truncate(length=16) }}...{% endif %}
+                </div>
+                <div class="card-footer">
+                    {% if pub.section_count and pub.section_count > 0 %}
+                    <span class="card-sections">{{ pub.section_count }} sections</span>
+                    {% elif pub.version and pub.version != "1" %}
+                    <span class="card-version">version: {{ pub.version }}</span>
+                    {% else %}
+                    <span></span>
+                    {% endif %}
+                    <div class="card-actions">
+                        <button class="btn-ghost btn-icon" onclick="event.stopPropagation(); showEventModal({{ pub.event_json | safe }})" title="View event">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </article>
+        {% else %}
+        <div class="empty-state">
+            <p class="empty-state-title">No publications found</p>
+            <p class="empty-state-text">Publications will appear here once stored in nostrdb</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Load More Button -->
+    {% if has_more %}
+    <div class="feed-load-more" style="text-align: center; padding: 2rem;">
+        <button id="load-more-btn" class="btn" style="min-width: 200px;">
+            Show more publications
+        </button>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 2rem;">
+        <p style="color: var(--text-muted); font-size: 0.875rem;">You've reached the end of the feed.</p>
+    </div>
+    {% endif %}
+
+    <!-- Load More Sentinel for Infinite Scroll -->
+    {% if has_more %}
+    <div id="feed-sentinel" style="height: 1px;"></div>
+    {% endif %}
+
+    <!-- Loading Indicator -->
+    <div id="feed-loading" class="hidden" style="text-align: center; padding: 2rem;">
+        <div class="skeleton" style="width: 200px; height: 20px; margin: 0 auto;"></div>
+        <p style="color: var(--text-muted); margin-top: 1rem;">Loading more publications...</p>
+    </div>
+</div>
+
+<script>
+// State management
+let currentPage = {{ current_page }};
+let isLoading = false;
+let hasMore = {{ has_more }};
+
+// Sort change handler
+document.getElementById('sort-order').addEventListener('change', function() {
+    const url = new URL(window.location);
+    url.searchParams.set('sort', this.value);
+    window.location = url;
+});
+
+// Load more publications via AJAX
+async function loadMorePublications() {
+    if (isLoading || !hasMore) return;
+
+    isLoading = true;
+    const loadingEl = document.getElementById('feed-loading');
+    const loadMoreBtn = document.getElementById('load-more-btn');
+
+    // Show loading indicator
+    loadingEl.classList.remove('hidden');
+    if (loadMoreBtn) loadMoreBtn.disabled = true;
+
+    try {
+        const nextPage = currentPage + 1;
+        const url = new URL(window.location);
+        url.searchParams.set('page', nextPage);
+
+        const response = await fetch(url.toString(), {
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!response.ok) throw new Error('Failed to load more publications');
+
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract new publications from the response
+        const newPublications = doc.querySelectorAll('.publication-card');
+        const feedGrid = document.querySelector('.feed-grid');
+
+        newPublications.forEach(card => {
+            feedGrid.appendChild(card.cloneNode(true));
+        });
+
+        currentPage = nextPage;
+
+        // Check if there are more publications
+        const newHasMore = doc.querySelector('#feed-sentinel') !== null;
+        hasMore = newHasMore;
+
+        if (!hasMore) {
+            // Remove load more button and show end message
+            if (loadMoreBtn) loadMoreBtn.parentElement.remove();
+            const sentinel = document.getElementById('feed-sentinel');
+            if (sentinel) sentinel.remove();
+
+            feedGrid.insertAdjacentHTML('afterend', `
+                <div style="text-align: center; padding: 2rem;">
+                    <p style="color: var(--text-muted); font-size: 0.875rem;">You've reached the end of the feed.</p>
+                </div>
+            `);
+        }
+
+        // Update subtitle
+        const displayedCount = document.querySelectorAll('.publication-card').length;
+        const subtitle = document.querySelector('.feed-subtitle');
+        if (subtitle) {
+            const totalMatch = subtitle.textContent.match(/of (\d+)/);
+            if (totalMatch) {
+                subtitle.textContent = `Showing ${displayedCount} of ${totalMatch[1]} publications (kind 30040)`;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading more publications:', error);
+        alert('Failed to load more publications. Please try again.');
+    } finally {
+        isLoading = false;
+        loadingEl.classList.add('hidden');
+        if (loadMoreBtn) loadMoreBtn.disabled = false;
+    }
+}
+
+// Load more button click handler
+const loadMoreBtn = document.getElementById('load-more-btn');
+if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', loadMorePublications);
+}
+
+// Intersection Observer for infinite scroll
+const sentinel = document.getElementById('feed-sentinel');
+if (sentinel) {
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting && !isLoading && hasMore) {
+                loadMorePublications();
+            }
+        });
+    }, {
+        rootMargin: '100px' // Trigger 100px before reaching the sentinel
+    });
+
+    observer.observe(sentinel);
+}
+</script>
+{% endblock %}

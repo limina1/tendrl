@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Tendrl{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/parasitic-theme.css">
+    {% block head %}{% endblock %}
+</head>
+<body data-parasitic-theme data-auto-glitch="true" data-lambda="0.3">
+    <!-- Parasitic Theme Overlays (created by JS, but can be pre-defined) -->
+
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div class="nav-inner">
+                <!-- Logo/Brand with Parasitic Ghost -->
+                <a href="/" class="nav-logo">
+                    <div class="logo-wrapper">
+                        <span class="logo-host">Alexandria<sup class="logo-local">local</sup></span>
+                        <span class="logo-parasite" data-text="T̶E̷N̶D̸R̷L̴">T̶E̷N̶D̸R̷L̴</span>
+                    </div>
+                </a>
+
+                <!-- Main Nav -->
+                <div class="nav-links">
+                    <a href="/feed" class="nav-link {% if active_page == 'feed' %}active{% endif %}">
+                        Feed
+                    </a>
+                    <a href="/visualize" class="nav-link {% if active_page == 'visualize' %}active{% endif %}">
+                        Visualize
+                    </a>
+                </div>
+
+                <!-- Actions -->
+                <div class="nav-links">
+                    <button id="theme-toggle" class="btn-ghost btn-icon" title="Toggle dark mode">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                    </button>
+                    <button id="infection-settings-toggle" class="btn-ghost btn-icon" title="Infection Settings">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Event Viewer Modal -->
+    <div id="event-modal" class="modal hidden">
+        <div class="modal-backdrop" onclick="closeEventModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Event Details</h3>
+                <button onclick="closeEventModal()" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="event-json" class="event-json"></pre>
+            </div>
+            <div class="modal-footer">
+                <button onclick="copyEventJson()" class="btn">
+                    Copy JSON
+                </button>
+                <button onclick="copyEventId()" class="btn btn-primary">
+                    Copy Event ID
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Infection Status Display -->
+    <div class="infection-status" id="infection-status">
+        <div class="status-line">
+            <span>STATE:</span>
+            <span id="parasitic-state">HOST</span>
+        </div>
+        <div class="status-line">
+            <span>DURATION:</span>
+            <span id="parasitic-duration">--</span>
+        </div>
+        <div class="status-line">
+            <span>NEXT:</span>
+            <span id="parasitic-next">--</span>
+        </div>
+        <div class="status-line">
+            <span>&lambda;:</span>
+            <span id="parasitic-lambda">0.30</span>
+        </div>
+    </div>
+
+    <!-- Infection Settings Panel -->
+    <div class="parasitic-controls hidden" id="infection-settings">
+        <h4>Infection Level</h4>
+        <div class="infection-level-display" id="infectionLevelDisplay">
+            <div class="level-bar-bg">
+                <div class="level-bar-fill" id="infectionLevelBar" style="width: 30%"></div>
+            </div>
+            <div class="level-text" id="infectionLevelText">30% TENDRL</div>
+        </div>
+        <div class="control-row">
+            <label for="infectionLevelSlider">Overall:</label>
+            <input type="range" id="infectionLevelSlider" min="0" max="100" step="1" value="30">
+            <span id="infectionLevelValue">30%</span>
+        </div>
+        <div class="control-row" style="font-size:0.65rem; color:var(--text-muted); margin-bottom:1rem;">
+            <span>0% = Pure Alexandria • 100% = Full Tendrl Takeover</span>
+        </div>
+
+        <h4>Logo Flicker Speed</h4>
+        <div class="control-row">
+            <label for="logoGlitchSpeed">Speed (Hz):</label>
+            <input type="range" id="logoGlitchSpeed" min="0.5" max="10" step="0.5" value="3">
+            <span id="logoGlitchSpeedValue">3 Hz</span>
+        </div>
+        <div class="control-row" style="font-size:0.65rem; color:var(--text-muted); margin-bottom:1rem;">
+            <span>0.5 Hz = Slow neon sign • 10 Hz = Fast glitch</span>
+        </div>
+
+        <details>
+            <summary style="cursor:pointer; margin-bottom:0.5rem; color:var(--text-secondary);">Advanced Settings</summary>
+
+        <h4 style="margin-top:0.5rem">Interval Distribution</h4>
+        <svg id="intervalDistGraph" class="dist-viz" width="200" height="40" viewBox="0 0 200 40"></svg>
+        <div class="control-row">
+            <label for="lambdaSlider">Lambda (&lambda;):</label>
+            <input type="range" id="lambdaSlider" min="0.05" max="1.0" step="0.05" value="0.3">
+            <span id="lambdaValue">0.30</span>
+        </div>
+        <div class="control-row">
+            <label for="distSelect">Type:</label>
+            <select id="distSelect">
+                <option value="exponential">Exponential</option>
+                <option value="poisson">Poisson</option>
+                <option value="uniform">Uniform</option>
+            </select>
+        </div>
+
+        <h4 style="margin-top:1rem">Intensity (Beta - U-shape)</h4>
+        <svg id="intensityDistGraph" class="dist-viz" width="200" height="40" viewBox="0 0 200 40"></svg>
+        <div class="control-row">
+            <label for="intensityAlphaSlider">Alpha (&alpha;):</label>
+            <input type="range" id="intensityAlphaSlider" min="0.1" max="2" step="0.1" value="0.4">
+            <span id="intensityAlphaValue">0.4</span>
+        </div>
+        <div class="control-row">
+            <label for="intensityBetaSlider">Beta (&beta;):</label>
+            <input type="range" id="intensityBetaSlider" min="0.1" max="2" step="0.1" value="0.5">
+            <span id="intensityBetaValue">0.5</span>
+        </div>
+        <div class="control-row" style="font-size:0.65rem; color:var(--text-muted);">
+            <span>&alpha;,&beta; &lt; 1 = U-shape (bimodal)</span>
+        </div>
+
+        <h4 style="margin-top:1rem">Duration (Gamma)</h4>
+        <svg id="durationDistGraph" class="dist-viz" width="200" height="40" viewBox="0 0 200 40"></svg>
+        <div class="control-row">
+            <label for="durationMeanSlider">Mean (ms):</label>
+            <input type="range" id="durationMeanSlider" min="100" max="2000" step="50" value="300">
+            <span id="durationMeanValue">300</span>
+        </div>
+        <div class="control-row">
+            <label for="durationShapeSlider">Shape (k):</label>
+            <input type="range" id="durationShapeSlider" min="1" max="10" step="0.5" value="3">
+            <span id="durationShapeValue">3.0</span>
+        </div>
+
+        <h4 style="margin-top:1rem">Controls</h4>
+        <div class="control-row">
+            <label for="autoGlitch">Auto Glitch:</label>
+            <input type="checkbox" id="autoGlitch" checked>
+        </div>
+        <div class="control-row">
+            <button class="btn" id="manualGlitch" style="width:100%">Random Infection</button>
+        </div>
+        <div class="control-row">
+            <button class="btn" id="manualFullGlitch" style="width:100%">Full Takeover</button>
+        </div>
+
+        </details>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+    <script src="/static/js/parasitic-theme.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
