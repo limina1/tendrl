@@ -8,3 +8,4 @@ Cargo.lock
 *.db-wal
 .DS_Store
 node_modules/
+nostr-feeds
